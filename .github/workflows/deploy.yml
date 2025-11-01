@@ -19,7 +19,7 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
         working-directory: .   # 👈 ensure this matches your actual React project folder
 
       - name: Build the project
