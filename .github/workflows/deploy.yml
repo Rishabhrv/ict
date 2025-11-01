@@ -24,7 +24,11 @@ jobs:
 
       - name: Build the project
         run: npm run build
-        working-directory: .   # Same here
+        working-directory: .
+        env:
+          REACT_APP_FLASK_AUTH_URL: ${{ secrets.REACT_APP_FLASK_AUTH_URL }}
+          REACT_APP_FLASK_LOGIN_URL: ${{ secrets.REACT_APP_FLASK_LOGIN_URL }}
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
 
       - name: Deploy via rsync
         env:
@@ -34,7 +38,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no rishabhvyas@178.16.137.226 "mkdir -p /home/rishabhvyas/ict/build/"
+          ssh -o StrictHostKeyChecking=no rishabhvyas@178.16.137.226 "mkdir -p /home/rishabhvyas/ict/build/ && ls -ld /home/rishabhvyas/ict/build/ && test -w /home/rishabhvyas/ict/build/ && echo 'Directory is writable'"
           echo "🚀 Uploading build files to VPS..."
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ rishabhvyas@178.16.137.226:/home/rishabhvyas/ict/build/
           echo "✅ Deployment completed!"
