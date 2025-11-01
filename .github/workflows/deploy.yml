@@ -1,58 +1,37 @@
-name: 🚀 Deploy React App to VPS
+name: Deploy React App
 
 on:
   push:
     branches:
       - main
-    # Optional: run only when React app changes
-    paths:
-      - 'ict/**'
-      - '.github/workflows/deploy.yml'
 
 jobs:
-  deploy-react:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 🧾 Step 1: Checkout repo
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 🧩 Step 2: Set up Node.js (use same version as local)
-      - name: Set up Node.js
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 🏗️ Step 3: Build React app
-      - name: Build React App
-        working-directory: ict
-        run: |
-          npm ci
-          npm run build
+      - name: Install dependencies
+        run: npm ci
+        working-directory: .   # 👈 ensure this matches your actual React project folder
 
-      # 🔐 Step 4: Configure SSH (for VPS access)
-      - name: Configure SSH
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Build the project
+        run: npm run build
+        working-directory: .   # 👈 same here
 
-      # 🔑 Step 5: Add VPS to known_hosts (avoid manual confirmation)
-      - name: Add VPS to known_hosts
+      - name: Deploy via rsync
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
+          echo "🚀 Uploading build files to VPS..."
           mkdir -p ~/.ssh
-          ssh-keyscan -H 178.16.137.226 >> ~/.ssh/known_hosts
-
-      # 🚀 Step 6: Upload React build to VPS
-      - name: Deploy Build to VPS
-        run: |
-          echo "🚚 Uploading React build to VPS..."
-          rsync -avz --delete ict/build/ rishabhvyas@178.16.137.226:/home/rishabh/ict/build/
-          echo "✅ React app deployed successfully!"
-
-      # 🔁 Step 7 (Optional): Reload Nginx to serve updated build
-      - name: Reload Nginx
-        run: |
-          ssh -o StrictHostKeyChecking=no rishabhvyas@178.16.137.226 << 'EOF'
-          sudo nginx -t && sudo systemctl reload nginx
-          EOF
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ user@your-vps-ip:/var/www/yourdomain.com/
