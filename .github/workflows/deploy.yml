@@ -22,9 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: ict/package-lock.json
+          node-version: 22
 
       # 🏗️ Step 3: Build React app
       - name: Build React App
