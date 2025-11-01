@@ -34,7 +34,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no rishabhvyas@178.16.137.226 "mkdir -p /home/rishabh/ict/build/"
+          ssh -o StrictHostKeyChecking=no rishabhvyas@178.16.137.226 "mkdir -p /home/rishabhvyas/ict/build/"
           echo "🚀 Uploading build files to VPS..."
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ rishabhvyas@178.16.137.226:/home/rishabh/ict/build/
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ rishabhvyas@178.16.137.226:/home/rishabhvyas/ict/build/
           echo "✅ Deployment completed!"
