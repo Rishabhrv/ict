@@ -34,4 +34,5 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ user@your-vps-ip:/var/www/yourdomain.com/
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ rishabhvyas@178.16.137.226:/home/rishabh/ict/build/
+          echo "✅ Deployment completed!"
