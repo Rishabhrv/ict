@@ -20,19 +20,21 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-        working-directory: .   # 👈 ensure this matches your actual React project folder
+        working-directory: .   # Ensure this matches your React project folder
 
       - name: Build the project
         run: npm run build
-        working-directory: .   # 👈 same here
+        working-directory: .   # Same here
 
       - name: Deploy via rsync
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          echo "🚀 Uploading build files to VPS..."
+          echo "🚀 Setting up SSH and creating remote directory..."
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no rishabhvyas@178.16.137.226 "mkdir -p /home/rishabh/ict/build/"
+          echo "🚀 Uploading build files to VPS..."
           rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" build/ rishabhvyas@178.16.137.226:/home/rishabh/ict/build/
           echo "✅ Deployment completed!"
