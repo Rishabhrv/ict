@@ -44,8 +44,6 @@ const VALID_ACCESS = {
 };
 
 
-
-
 const HomePage = () => {
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
