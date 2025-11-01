@@ -45,6 +45,11 @@ const VALID_ACCESS = {
 
 
 const HomePage = () => {
+  console.log("Environment Variables:", {
+    FLASK_AUTH_URL,
+    FLASK_LOGIN_URL,
+    API_URL: process.env.REACT_APP_API_URL,
+  });
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [selectedConv, setSelectedConv] = useState(null);
