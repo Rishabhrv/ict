@@ -1,11 +1,13 @@
 // src/socket.js
 import { io } from "socket.io-client";
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 let socket = null;
 
 export function createSocket(token) {
   if (socket) return socket;
-  socket = io("http://localhost:5001", {
+  socket = io(`${API_URL}`, {
     transports: ["websocket", "polling"],
     autoConnect: true,
     // we'll authenticate after connect via event

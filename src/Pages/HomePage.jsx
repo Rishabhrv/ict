@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Slidebar from "../components/Slidebar";
 import HomePageUsers from "../components/HomePageUsers";
 import HomePageMsg from "../components/HomePageMsg";
+import HomePageGroupMsg from "../components/HomePageGroupMsg";
 import '../css/SlideBar.css'
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowRightFromBracket } from "@fortawesome/free-solid-svg-icons";
@@ -44,12 +45,9 @@ const VALID_ACCESS = {
 };
 
 
+
+
 const HomePage = () => {
-  console.log("Environment Variables:", {
-    FLASK_AUTH_URL,
-    FLASK_LOGIN_URL,
-    API_URL: process.env.REACT_APP_API_URL,
-  });
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
   const [selectedConv, setSelectedConv] = useState(null);
@@ -68,6 +66,7 @@ const redirectToLogin = (message) => {
   localStorage.removeItem("token");
   showPopup(message || "Authentication failed. Please log in again.");
 };
+
 
 
 // ✅ Decode JWT (client-side)
@@ -260,20 +259,42 @@ const checkTokenExpiry = (token) => {
 
   return (
     <div className="flex">
-      <Slidebar user={user} />
-      <HomePageUsers
+  <Slidebar user={user} />
+
+  <HomePageUsers
+    token={token}
+    onSelectConversation={(conv) => setSelectedConv(conv)}
+    user={user}
+    lastMessageUpdate={lastMessageUpdate}
+  />
+
+  {/* ✅ Conditional render for chat type */}
+  {selectedConv ? (
+    selectedConv.isGroup ? (
+      <HomePageGroupMsg
         token={token}
-        onSelectConversation={(conv) => setSelectedConv(conv)}
+        conversation={selectedConv}
         user={user}
-        lastMessageUpdate={lastMessageUpdate}
-      />
-      <HomePageMsg 
-        token={token} 
-        conversation={selectedConv} 
-        user={user} 
         onNewMessage={(data) => setLastMessageUpdate(data)}
       />
-    </div>
+    ) : (
+      <HomePageMsg
+        token={token}
+        conversation={selectedConv}
+        user={user}
+        onNewMessage={(data) => setLastMessageUpdate(data)}
+      />
+    )
+  ) : (
+    // Optional: show a placeholder when no chat is selected
+    <div className="flex flex-col w-full items-center justify-center text-gray-500 text-center h-full my-auto py-auto">
+        <p className="text-lg font-semibold">No conversation selected</p>
+        <p className="text-sm text-gray-400">
+          Select a user from the left to start chatting 💬
+        </p>
+      </div>
+  )}
+</div>
   );
 };
 

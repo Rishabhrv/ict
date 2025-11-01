@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFile, faImage, faPlus } from "@fortawesome/free-solid-svg-icons";
 import {  Search, MessagesSquare  } from "lucide-react";
+import AddMemberSlider from "../components/AddMemberSlider";
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -12,23 +13,47 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const [loading, setLoading] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
+  const [isSliderOpen, setIsSliderOpen] = useState(false);
 
 
   // 🔹 Fetch existing conversations
   useEffect(() => {
-    fetch(`${API_URL}/conversations`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setConvos(data.map((c) => ({ ...c, hasConversation: true })));
-        } else {
-          setConvos([]);
-        }
-      })
-      .catch((err) => console.error("Error fetching conversations:", err));
-  }, [token, lastMessageUpdate]);
+  const fetchChats = async () => {
+    try {
+      const [convoRes, groupRes] = await Promise.all([
+        fetch(`${API_URL}/conversations`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/groups`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      const convoData = await convoRes.json();
+      const groupData = await groupRes.json();
+
+      const userChats = Array.isArray(convoData)
+        ? convoData.map((c) => ({ ...c, type: "user", hasConversation: true }))
+        : [];
+
+      const groups = Array.isArray(groupData)
+        ? groupData.map((g) => ({ ...g, type: "group", hasConversation: true }))
+        : [];
+
+      // ✅ Merge & sort by latest message time
+      const merged = [...userChats, ...groups].sort(
+        (a, b) => new Date(b.last_time || 0) - new Date(a.last_time || 0)
+      );
+
+      setConvos(merged);
+    } catch (err) {
+      console.error("Error fetching chats:", err);
+    }
+  };
+
+  fetchChats();
+}, [token, lastMessageUpdate]);
+
 
   // 🔹 Handle search
   useEffect(() => {
@@ -127,7 +152,7 @@ const timeAgo = (dateString) => {
   return (
     <div className="w-80 min-w-90 bg-white border-r border-gray-200 flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 pt-4">
+      <div className="p-4 pb-0 border-b border-gray-200 pt-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">{user.username}</h2>
@@ -182,6 +207,23 @@ const timeAgo = (dateString) => {
             className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f37c7c]"
           />
         </div>
+
+        <div className="flex justify-between mt-1 ">
+          <div className="flex">
+            <div className="text-xs text-gray-500 bg-gray-100 p-1 px-2 m-2 ml-0 rounded-lg cursor-pointer">
+              New
+            </div>
+            <div className="text-xs text-gray-500 bg-gray-100 p-1 px-2 m-2 rounded-lg cursor-pointer">
+              Unread
+            </div>
+          </div>
+          <div
+  onClick={() => setIsSliderOpen(true)}
+  className="text-xs text-white bgcolor p-1 m-2 ml-0 rounded-full cursor-pointer hover:bg-white hover:text-bgcolor transition"
+>
+  <FontAwesomeIcon icon={faPlus} />
+</div>
+        </div>
       </div>
 
       {/* Conversation list */}
@@ -190,29 +232,22 @@ const timeAgo = (dateString) => {
 
         {Array.isArray(listToShow) && listToShow.length > 0 ? (
           listToShow.map((c) => {
-            const name = c.other_username || c.username || "Unknown";
-            const avatarLetter = name.charAt(0).toUpperCase();
+            const name = c.type === "group" ? c.group_name : c.other_username || c.username;
+            const avatarLetter = name ? name.charAt(0).toUpperCase() : "?";
             const isActive = activeChat === (c.id || c.user_id);
 
             return (
               <button
                 key={c.id || c.user_id}
                 onClick={() => {
-                  if (c.hasConversation) {
-                    const convo = convos.find(
-                      (conv) =>
-                        conv.other_username === c.username ||
-                        conv.other_user_id === c.id
-                    );
-                    if (convo) {
-                      onSelectConversation(convo);
-                      setActiveChat(c.id || c.user_id);
-                    } else {
-                      onSelectConversation(c);
-                      setActiveChat(c.id || c.user_id);
-                    }
-                  }
-                }}
+    setActiveChat(c.id || c.user_id);
+
+    if (c.type === "group") {
+      onSelectConversation({ ...c, isGroup: true });
+    } else {
+      onSelectConversation(c);
+    }
+  }}
                 className={`w-full p-4 flex items-start space-x-3 hover:bg-red-50 transition-colors ${
                   isActive ? "bg-red-50" : ""
                 }`}
@@ -220,14 +255,23 @@ const timeAgo = (dateString) => {
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
                   <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-semibold ${
-                      c.type === "group"
-                        ? "bg-gray-100 text-gray-600"
-                        : "bg-gradient-to-br from-[#f37c7c] to-[#ef6061] text-white"
-                    }`}
-                  >
-                    {avatarLetter}
-                  </div>
+  className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-semibold ${
+    c.type === "group"
+      ? "bg-gray-100 text-gray-600"
+      : "bg-gradient-to-br from-[#f37c7c] to-[#ef6061] text-white"
+  }`}
+>
+  {c.group_image ? (
+    <img
+      src={`${API_URL}${c.group_image}`}
+      alt={name}
+      className="w-full h-full object-cover rounded-xl"
+    />
+  ) : (
+    avatarLetter
+  )}
+</div>
+
                   {c.status === "online" && (
                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                   )}
@@ -293,6 +337,20 @@ const timeAgo = (dateString) => {
           !loading && <div className="p-4 text-gray-500 text-sm">No users found</div>
         )}
       </div>
+
+      {/* 🔹 Slider Component */}
+        <AddMemberSlider
+  isOpen={isSliderOpen}
+  onClose={() => setIsSliderOpen(false)}
+  token={token}
+  API_URL={API_URL}
+  onAddMembers={(selected) => {
+    console.log("Selected members:", selected);
+    // 🔹 You can now send these to your backend to create a group
+  }}
+/>
+
+
     </div>
   );
 };

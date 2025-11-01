@@ -24,3 +24,22 @@
 .text-bgcolor{
   color :#ef6061;
 }
+
+/* tiny-scrollbar.css */
+.tiny-scrollbar::-webkit-scrollbar {
+  width: 4px; /* scrollbar thickness */
+}
+
+.tiny-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(150, 150, 150, 0.5);
+  border-radius: 10px;
+  height: 2px; /* makes the thumb shorter */
+}
+
+.tiny-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(120, 120, 120, 0.7);
+}
+
+.tiny-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
