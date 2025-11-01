@@ -94,41 +94,50 @@ const showErrorPopup = (message) => {
 const handleFileChange = async (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
+  if (!user.username) {
+    showErrorPopup('Username not available. Please log in again.');
+    return;
+  }
 
   const formData = new FormData();
-  files.forEach((file) => formData.append("file", file));
-  formData.append("username", user.username);
+  files.forEach((file) => formData.append('file', file));
+  formData.append('username', user.username);
 
   try {
     const res = await fetch(`${API_URL}/upload_file`, {
-      method: "POST",
+      method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
+    if (!res.ok) {
+      const data = await res.json();
+      const errMsg = data.error || 'File upload failed. Please try again.';
+      showErrorPopup(errMsg);
+      console.error('File upload failed:', data);
+      return;
+    }
+
     const data = await res.json();
-
-    if (res.ok && data.urls && Array.isArray(data.urls)) {
+    if (data.urls && Array.isArray(data.urls)) {
       const s = getSocket();
-
       data.urls.forEach((url, i) => {
         const file = files[i];
         const payload = {
           token,
           conversation_id: conversation.id,
           message: url,
-          message_type: file.type.startsWith("image/") ? "image" : "file",
+          message_type: file.type.startsWith('image/') ? 'image' : 'file',
         };
-        s.emit("send_message", payload);
+        s.emit('send_message', payload);
       });
     } else {
-      const errMsg = data.error || "File upload failed. Please try again.";
-      showErrorPopup(errMsg);
-      console.error("File upload failed:", data);
+      showErrorPopup('Invalid response from server.');
+      console.error('File upload failed:', data);
     }
   } catch (err) {
-    console.error("Upload error:", err);
-    showErrorPopup("Upload failed due to network error.");
+    console.error('Upload error:', err);
+    showErrorPopup('Upload failed due to network error.');
   }
 };
 
