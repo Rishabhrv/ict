@@ -17,7 +17,7 @@ const Slidebar = ({ user }) => {
       {/* --- Main Nav Buttons --- */}
       <div className="flex-1 flex flex-col items-center space-y-4 mt-4">
         <Link
-          to={`/chat`}
+          to={`/`}
           className="w-12 h-12 bgcolor-100 rounded-xl flex items-center justify-center hover:bgcolor transition-colors"
         >
           <FontAwesomeIcon icon={faHouseChimney} className="text-white text-lg" />
