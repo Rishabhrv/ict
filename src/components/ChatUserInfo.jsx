@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faImages, faFileAlt, faCircleDown } from "@fortawesome/free-solid-svg-icons";
 
-const API_URL = "http://localhost:5001"; // ⚙️ your backend URL
+const API_URL = process.env.REACT_APP_API_URL;
 
 const ChatUserInfo = ({ token, conversation, user }) => {
   const [mediaFiles, setMediaFiles] = useState([]);
