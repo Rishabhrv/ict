@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faImages, faFileAlt, faCircleDown } from "@fortawesome/free-solid-svg-icons";
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL; 
 
 const ChatUserInfo = ({ token, conversation, user }) => {
   const [mediaFiles, setMediaFiles] = useState([]);
@@ -48,7 +48,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
       <div className="flex justify-around my-3 border-b border-gray-200">
         <button
           onClick={() => setActiveTab("docs")}
-          className={`flex items-center gap-1 px-3 py-1 text-sm font-medium ${
+          className={`flex items-center gap-1 px-3 py-1 text-sm font-medium cursor-pointer ${
             activeTab === "docs"
               ? "text-blue-600 border-b-2 border-blue-600"
               : "text-gray-500"
@@ -59,7 +59,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
         </button>
         <button
           onClick={() => setActiveTab("images")}
-          className={`flex items-center gap-1 px-3 py-1 text-sm font-medium ${
+          className={`flex items-center gap-1 px-3 py-1 text-sm font-medium cursor-pointer ${
             activeTab === "images"
               ? "text-blue-600 border-b-2 border-blue-600"
               : "text-gray-500"
@@ -113,7 +113,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
                 <div>
                     <button
                     onClick={() => window.open(file.file_url, "_blank")}
-                    className="text-lg text-gray-400 hover:underline"
+                    className="text-lg text-gray-400 hover:underline cursor-pointer"
                   >
                     <FontAwesomeIcon icon={faCircleDown} />
                   </button>

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFile, faImage, faPlus } from "@fortawesome/free-solid-svg-icons";
+import { faFile, faImage, faPlus,faUserGroup } from "@fortawesome/free-solid-svg-icons";
 import {  Search, MessagesSquare, X   } from "lucide-react";
-import AddMemberSlider from "../components/AddMemberSlider";
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -13,7 +12,7 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const [loading, setLoading] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
-  const [isSliderOpen, setIsSliderOpen] = useState(false);
+  // const [isSliderOpen, setIsSliderOpen] = useState(false);
 
 
   // 🔹 Fetch existing conversations
@@ -198,9 +197,9 @@ const timeAgo = (dateString) => {
   title={showAllUsers ? "Hide all users" : "Show all users"}
 >
   {showAllUsers ? (
-    <X className="w-5 h-5 text-gray-600" />
+    <X className="w-5 h-5 text-gray-600 cursor-pointer" />
   ) : (
-    <MessagesSquare className="w-5 h-5 text-gray-600" />
+    <MessagesSquare className="w-5 h-5 text-gray-600 cursor-pointer" />
   )}
 </button>
 
@@ -228,12 +227,12 @@ const timeAgo = (dateString) => {
               Unread
             </div>
           </div>
-          <div
+          {/* <div
   onClick={() => setIsSliderOpen(true)}
   className="text-xs text-white bgcolor p-1 m-2 ml-0 rounded-full cursor-pointer hover:bg-white hover:text-bgcolor transition"
 >
   <FontAwesomeIcon icon={faPlus} />
-</div>
+</div> */}
         </div>
       </div>
 
@@ -259,7 +258,7 @@ const timeAgo = (dateString) => {
       onSelectConversation(c);
     }
   }}
-                className={`w-full p-4 flex items-start space-x-3 hover:bg-red-50 transition-colors ${
+                className={`w-full p-4 flex items-start space-x-3 hover:bg-red-50 transition-colors cursor-pointer ${
                   isActive ? "bg-red-50" : ""
                 }`}
               >
@@ -273,11 +272,7 @@ const timeAgo = (dateString) => {
   }`}
 >
   {c.group_image ? (
-    <img
-      src={`${API_URL}${c.group_image}`}
-      alt={name}
-      className="w-full h-full object-cover rounded-xl"
-    />
+    <FontAwesomeIcon icon={faUserGroup} />
   ) : (
     avatarLetter
   )}
@@ -329,7 +324,7 @@ const timeAgo = (dateString) => {
                       e.stopPropagation();
                       createConversation(c.id);
                     }}
-                    className="text-white hover:text-gray-300 text-xs cursor-pointer bgcolor-100 rounded-lg p-2 py-1"
+                    className="bg-white text-red-400 border text-[10px] cursor-pointer hover:bg-red-300 hover:text-white  rounded-lg p-1 py-[2px] my-auto"
                     title="Start Conversation"
                   >
                     Connect <FontAwesomeIcon icon={faPlus} />
@@ -349,17 +344,7 @@ const timeAgo = (dateString) => {
         )}
       </div>
 
-      {/* 🔹 Slider Component */}
-        <AddMemberSlider
-  isOpen={isSliderOpen}
-  onClose={() => setIsSliderOpen(false)}
-  token={token}
-  API_URL={API_URL}
-  onAddMembers={(selected) => {
-    console.log("Selected members:", selected);
-    // 🔹 You can now send these to your backend to create a group
-  }}
-/>
+      
 
 
     </div>

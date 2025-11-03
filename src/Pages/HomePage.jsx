@@ -259,7 +259,7 @@ const checkTokenExpiry = (token) => {
 
   return (
     <div className="flex">
-  <Slidebar user={user} />
+  <Slidebar user={user} token={token}/>
 
   <HomePageUsers
     token={token}

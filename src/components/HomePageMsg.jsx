@@ -526,8 +526,8 @@ const handleFileChange = async (e) => {
 
 
         {/* Input Box */}
-        <div className="flex gap-2 border-t border-gray-300 px-4 py-2 pb-0">
-          <div className="w-full rounded-lg bg-gray-100 pb-0 mt-2 textarea-height">
+        <div className="flex gap-2 border-t border-gray-300 px-4 py-2 pb-0 mt-auto">
+          <div className="w-full rounded-lg bg-gray-100 pb-0 mt-2 textarea-height ">
               <textarea
                 className="w-full h-12 outline-none resize-none text-sm p-3 "
                 placeholder="Type a message..."
@@ -541,7 +541,7 @@ const handleFileChange = async (e) => {
                 }}
               />
 
-              <div className="flex justify-between items-center mt-2 text-gray-600 px-2 pb-2">
+              <div className="flex justify-between items-center mt-[3%] text-gray-600 px-2 pt-auto">
                 <div className="flex space-x-3">
                   <label className=" font-semibold text-lg px-1 text-gray-500 cursor-pointer">
                     <FontAwesomeIcon icon={faPaperclip} />
@@ -559,7 +559,7 @@ const handleFileChange = async (e) => {
                         onClick={() => setShowEmojiPicker((prev) => !prev)}
                         className="focus:outline-none"
                       >
-                        <Smile className=" text-gray-600" />
+                        <Smile className=" text-gray-600 cursor-pointer" />
                       </button>
 
                         {showEmojiPicker && (
@@ -581,7 +581,7 @@ const handleFileChange = async (e) => {
             <div className="flex items-center space-x-2 mt-auto pt-auto">
               <button
                 onClick={sendMessage}
-                className="w-12 h-12 bgcolor-500 hover:bg-[#f37c7c] rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
+                className="w-12 h-12 bgcolor-500 hover:bg-[#f37c7c] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer"
               >
                 <Send className="w-5 h-5 text-white" />
               </button>
