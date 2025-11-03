@@ -1,20 +1,21 @@
+// src/components/HomePageGroupMsg.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBars,
   faPaperclip,
-  // faCircleDown,
-  // faFile,
-  // faFilePdf,
-  // faFileWord,
-  // faFileExcel,
-  // faFilePowerpoint,
-  // faFileLines,
-  // faFileZipper,
-  // faTrash,
-  // faShareFromSquare,
-  // faReply,
-  // faEllipsisVertical,
+  faCircleDown,
+  faFile,
+  faFilePdf,
+  faFileWord,
+  faFileExcel,
+  faFilePowerpoint,
+  faFileLines,
+  faFileZipper,
+  faTrash,
+  faShareFromSquare,
+  faReply,
+  faEllipsisVertical,
 } from "@fortawesome/free-solid-svg-icons";
 import { Smile, Send } from "lucide-react";
 import { createSocket, getSocket } from "../socket";
@@ -25,6 +26,7 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [showInfo, setShowInfo] = useState(false);
+  const [showMenu, setShowMenu] = useState(null);
   const [popupMsg, setPopupMsg] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const messagesRef = useRef(null);
@@ -35,7 +37,24 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
     setTimeout(() => setShowPopup(false), 4000);
   };
 
-  // ✅ Initialize socket
+  // ✅ Format date header like WhatsApp (Today, Yesterday, or full date)
+  const formatDateHeader = (dateStr) => {
+    const today = new Date();
+    const msgDate = new Date(dateStr);
+    const diffDays = Math.floor(
+      (today.setHours(0, 0, 0, 0) - msgDate.setHours(0, 0, 0, 0)) /
+        (1000 * 60 * 60 * 24)
+    );
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    return msgDate.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // ✅ Socket setup
   useEffect(() => {
     if (!token) return;
     const s = createSocket(token);
@@ -43,7 +62,7 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
     s.on("connect", () => console.log("✅ Group socket connected"));
 
     s.on("new_group_message", (msg) => {
-      if (msg.group_id === conversation.id) {
+      if (msg.group_id === conversation?.id) {
         setMessages((prev) => [...prev, msg]);
         if (typeof onNewMessage === "function") {
           onNewMessage({
@@ -56,9 +75,7 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
       }
     });
 
-    return () => {
-      s.off("new_group_message");
-    };
+    return () => s.off("new_group_message");
   }, [token, conversation, onNewMessage]);
 
   // ✅ Fetch group messages
@@ -72,89 +89,92 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
       .catch((err) => console.error(err));
 
     const s = getSocket();
-    if (s && conversation) s.emit("join_group", { token, group_id: conversation.id });
+    if (s && conversation)
+      s.emit("join_group", { token, group_id: conversation.id });
 
     return () => {
-      if (s && conversation) s.emit("leave_group", { group_id: conversation.id });
+      if (s && conversation)
+        s.emit("leave_group", { group_id: conversation.id });
     };
   }, [conversation, token]);
 
-  // ✅ Scroll to bottom when messages update
+  // ✅ Auto-scroll to bottom
   useEffect(() => {
-    if (messagesRef.current) {
+    if (messagesRef.current)
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }
   }, [messages]);
 
-  // ✅ Handle file upload
+  // ✅ Handle file uploads
   const handleFileChange = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  if (!user.username) {
+    showErrorPopup('Username not available. Please log in again.');
+    return;
+  }
 
-    const formData = new FormData();
-    files.forEach((file) => formData.append("file", file));
-    formData.append("username", user.username);
+  const formData = new FormData();
+  files.forEach((file) => formData.append('file', file));
+  formData.append('username', user.username);
 
-    try {
-      const res = await fetch(`${API_URL}/upload_file`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
+  try {
+    const res = await fetch(`${API_URL}/upload_file`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
 
+    if (!res.ok) {
       const data = await res.json();
-
-      if (res.ok && Array.isArray(data.urls)) {
-        const s = getSocket();
-        data.urls.forEach((url, i) => {
-          const file = files[i];
-          const payload = {
-            token,
-            group_id: conversation.id,
-            message: url,
-            message_type: file.type.startsWith("image/") ? "image" : "file",
-          };
-          s.emit("send_group_message", payload);
-        });
-      } else {
-        showErrorPopup(data.error || "File upload failed");
-      }
-    } catch (err) {
-      console.error("Upload error:", err);
-      showErrorPopup("Upload failed due to network error.");
+      const errMsg = data.error || 'File upload failed. Please try again.';
+      showErrorPopup(errMsg);
+      console.error('File upload failed:', data);
+      return;
     }
-  };
+
+    const data = await res.json();
+    if (data.urls && Array.isArray(data.urls)) {
+      const s = getSocket();
+      data.urls.forEach((url, i) => {
+        const file = files[i];
+        const payload = {
+          token,
+          conversation_id: conversation.id,
+          message: url,
+          message_type: file.type.startsWith('image/') ? 'image' : 'file',
+        };
+        s.emit('send_message', payload);
+      });
+    } else {
+      showErrorPopup('Invalid response from server.');
+      console.error('File upload failed:', data);
+    }
+  } catch (err) {
+    console.error('Upload error:', err);
+    showErrorPopup('Upload failed due to network error.');
+  }
+};
 
   // ✅ Send text message
   const sendMessage = () => {
     if (!input.trim()) return;
     const s = getSocket();
-    const payload = {
+    s.emit("send_group_message", {
       token,
       group_id: conversation.id,
       message: input.trim(),
       message_type: "text",
-    };
-    s.emit("send_group_message", payload);
+    });
     setInput("");
   };
 
-  // ✅ Convert timestamp → readable
-  const formatTime = (ts) => {
-    const date = new Date(ts);
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const hr = hours % 12 || 12;
-    return `${hr}:${minutes.toString().padStart(2, "0")} ${ampm}`;
-  };
-
-  // ✅ Empty screen if no group selected
   if (!conversation)
     return (
       <div className="flex flex-col w-full items-center justify-center text-gray-500 h-full">
         <p className="text-lg font-semibold">No group selected</p>
-        <p className="text-sm text-gray-400">Select a group to start chatting 💬</p>
+        <p className="text-sm text-gray-400">
+          Select a group to start chatting 💬
+        </p>
       </div>
     );
 
@@ -162,8 +182,8 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
     <div className="flex w-full">
       <div className="w-full">
         {/* Header */}
-        <div className="flex border-b border-gray-200 py-4 px-6 justify-between items-center">
-          <div className="flex items-center space-x-3">
+        <div className="flex border-b border-gray-200 py-4 px-6 justify-between">
+          <div className="flex items-center">
             <img
               src={
                 conversation.group_image
@@ -173,19 +193,19 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
               alt="Group"
               className="w-10 h-10 rounded-xl object-cover"
             />
-            <div>
+            <div className="pl-3">
               <h3 className="text-sm font-semibold text-gray-900">
                 {conversation.group_name}
               </h3>
-              <p className="text-xs text-gray-500">Group Chat</p>
+              <p className="text-xs mt-1">Group Chat</p>
             </div>
           </div>
-          <button
+          <div
+            className="p-2 cursor-pointer hover:text-gray-600"
             onClick={() => setShowInfo(!showInfo)}
-            className="p-2 hover:text-gray-600 text-gray-500"
           >
-            <FontAwesomeIcon icon={faBars} />
-          </button>
+            <FontAwesomeIcon icon={faBars} className="text-gray-500" />
+          </div>
         </div>
 
         {/* Messages */}
@@ -194,65 +214,233 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
           ref={messagesRef}
         >
           {showPopup && (
-            <div className="fixed top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50">
+            <div className="fixed top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300">
               {popupMsg}
             </div>
           )}
 
-          {!messages.length ? (
+          {messages.length === 0 ? (
             <p className="text-center text-gray-400">No messages yet</p>
           ) : (
             messages.map((msg, idx) => {
               const mine = msg.sender_id === user?.id;
+              const fileUrl = msg.message;
+              const fileName = fileUrl.split("/").pop();
+              const isImage =
+                msg.message_type === "image" ||
+                /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl);
+              const isFile =
+                msg.message_type === "file" ||
+                /\.(pdf|docx?|xlsx?|pptx?|txt|zip)$/i.test(fileUrl);
+
+              // ✅ Show date header when date changes
+              const prevMsg = messages[idx - 1];
+              const showDateHeader =
+                !prevMsg ||
+                new Date(prevMsg.timestamp).toDateString() !==
+                  new Date(msg.timestamp).toDateString();
+
               return (
-                 <div
-      key={idx}
-      className={`flex ${mine ? "justify-end" : "justify-start"} mb-3`}
-    >
-      <div className="flex flex-col max-w-xs">
-        {/* ✅ Show username for others */}
-        {!mine && (
-          <p className="text-xs text-gray-500 font-semibold mb-1 ml-1">
-            {msg.sender_name || msg.username || "Unknown User"}
-          </p>
-        )}
+                <React.Fragment key={idx}>
+                  {showDateHeader && (
+                    <div className="flex justify-center my-3">
+                      <div className="text-center text-gray-500 text-xs my-3 bg-gray-200 text-gray-700 px-3 py-1 rounded-full shadow-sm">
+                        {formatDateHeader(msg.timestamp)}
+                      </div>
+                    </div>
+                  )}
 
-        {/* ✅ Message bubble */}
-        <div
-          className={`w-fit px-3 py-2 rounded-2xl ${
-            mine
-              ? "bg-[#f37c7c] text-white rounded-br-sm self-end"
-              : "bg-gray-100 text-gray-900 rounded-bl-sm"
-          }`}
-        >
-          {msg.message_type === "image" ? (
-            <img
-              src={msg.message}
-              alt="img"
-              className="max-w-[200px] rounded-lg cursor-pointer"
-              onClick={() => window.open(msg.message, "_blank")}
-            />
-          ) : (
-            <p className="text-sm break-words">{msg.message}</p>
-          )}
+                  <div
+                    className={`flex ${
+                      mine ? "justify-end" : "justify-start"
+                    } mb-2 group relative`}
+                  >
+                    <div>
+                      <div className="flex">
+                        <div
+                          className={`w-fit max-w-xs px-3 py-2 rounded-2xl ${
+                            mine
+                              ? "bg-[#f37c7c] text-white rounded-br-sm"
+                              : "bg-gray-100 text-gray-900 rounded-bl-sm"
+                          }`}
+                        >
+                          {isImage ? (
+                            <div className="relative group">
+                              <img
+                                src={fileUrl}
+                                alt="sent"
+                                className="max-w-[200px] rounded-lg cursor-pointer transition-transform duration-200 group-hover:scale-[1.03]"
+                                onClick={() => window.open(fileUrl, "_blank")}
+                              />
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(fileUrl);
+                                    const blob = await response.blob();
+                                    const blobUrl =
+                                      window.URL.createObjectURL(blob);
+                                    const link = document.createElement("a");
+                                    link.href = blobUrl;
+                                    link.download = fileName || "download";
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    window.URL.revokeObjectURL(blobUrl);
+                                  } catch (error) {
+                                    console.error("Download failed:", error);
+                                  }
+                                }}
+                                className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition"
+                              >
+                                <FontAwesomeIcon icon={faCircleDown} />
+                              </button>
+                            </div>
+                          ) : isFile ? (
+                             (() => {
+    const ext = fileName.split(".").pop().toLowerCase();
+    let fileIcon = faFile;
+    let iconColor = "text-gray-500";
+
+    if (["pdf"].includes(ext)) {
+      fileIcon = faFilePdf;
+      iconColor = "text-red-400";
+    } else if (["doc", "docx"].includes(ext)) {
+      fileIcon = faFileWord;
+      iconColor = "text-blue-400";
+    } else if (["xls", "xlsx", "csv"].includes(ext)) {
+      fileIcon = faFileExcel;
+      iconColor = "text-green-400";
+    } else if (["zip", "rar", "7z"].includes(ext)) {
+      fileIcon = faFileZipper;
+      iconColor = "text-yellow-400";
+    } else if (["ppt", "pptx"].includes(ext)) {
+      fileIcon = faFilePowerpoint;
+      iconColor = "text-orange-400";
+    } else if (["txt"].includes(ext)) {
+      fileIcon = faFileLines;
+      iconColor = "text-gray-400";
+    }
+
+    return (
+      <div className="bg-white flex items-center space-x-3 border border-gray-300 rounded-lg p-2 shadow-sm hover:shadow-md transition">
+        <div className="bg-gray-100 w-9 h-9 flex items-center justify-center rounded-full">
+          <FontAwesomeIcon icon={fileIcon} className={`${iconColor} text-lg`} />
         </div>
-
-        {/* ✅ Timestamp */}
-        <p
-          className={`text-[10px] mt-1 text-gray-500 ${
-            mine ? "text-right pr-1" : "text-left pl-1"
-          }`}
-        >
-          {formatTime(msg.timestamp)}
-        </p>
+        <div className="flex-1">
+          <p className="text-xs font-semibold text-gray-800 w-44 break-words whitespace-normal">
+            {fileName}
+          </p>
+          <button
+            onClick={() => {
+              const a = document.createElement("a");
+              a.href = fileUrl;
+              a.download = fileName;
+              a.click();
+            }}
+            className="text-[11px] text-blue-600 hover:underline"
+          >
+            Download
+          </button>
+        </div>
       </div>
-    </div>
+    );
+  })()
+                          ) : (
+                            <p className="text-sm break-words">
+                              {msg.message}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* 3-dot menu */}
+                        <button
+                          className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition"
+                          onClick={() =>
+                            setShowMenu(showMenu === idx ? null : idx)
+                          }
+                        >
+                          <FontAwesomeIcon icon={faEllipsisVertical} />
+                        </button>
+
+                        {showMenu === idx && (
+                          <div
+                            className={`absolute ${
+                              mine ? "left-0" : "right-0"
+                            } -top-0 bg-white border border-gray-200 rounded-lg shadow-md z-20 flex`}
+                          >
+                            <button className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left">
+                              <FontAwesomeIcon icon={faReply} />
+                            </button>
+                            <button className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left">
+                              <FontAwesomeIcon icon={faShareFromSquare} />
+                            </button>
+                            {mine && (
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm("Delete this message?"))
+                                    return;
+                                  try {
+                                    const res = await fetch(
+                                      `${API_URL}/delete_group_message/${msg.id}`,
+                                      {
+                                        method: "DELETE",
+                                        headers: {
+                                          Authorization: `Bearer ${token}`,
+                                        },
+                                      }
+                                    );
+                                    if (res.ok) {
+                                      setMessages((prev) =>
+                                        prev.filter((m) => m.id !== msg.id)
+                                      );
+                                      const s = getSocket();
+                                      if (s)
+                                        s.emit("delete_group_message", {
+                                          id: msg.id,
+                                          group_id: conversation.id,
+                                        });
+                                    }
+                                  } catch (err) {
+                                    console.error("Delete error:", err);
+                                  }
+                                }}
+                                className="text-sm px-3 py-2 hover:bg-red-100 text-red-500 text-left"
+                              >
+                                <FontAwesomeIcon icon={faTrash} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Time */}
+                      <p
+                        className={`text-xs pt-1 text-gray-500 ${
+                          mine ? "text-right" : "text-left"
+                        }`}
+                      >
+                        {(() => {
+                          const ts = msg.timestamp;
+                          const match = ts?.match(/\d{2}:\d{2}:\d{2}/);
+                          if (!match) return "";
+                          const [h, m] = match[0].split(":").map(Number);
+                          let hours = h;
+                          const ampm = hours >= 12 ? "PM" : "AM";
+                          hours = hours % 12 || 12;
+                          return `${hours.toString().padStart(2, "0")}:${m
+                            .toString()
+                            .padStart(2, "0")} ${ampm}`;
+                        })()}
+                      </p>
+                    </div>
+                  </div>
+                </React.Fragment>
               );
             })
           )}
         </div>
 
-        {/* Input box */}
+        {/* Input Box */}
         <div className="flex gap-2 border-t border-gray-300 px-4 py-2">
           <div className="w-full rounded-lg bg-gray-100 pb-2 mt-2">
             <textarea
@@ -267,38 +455,35 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
                 }
               }}
             />
+
             <div className="flex justify-between items-center mt-2 text-gray-600 px-2 pb-2">
-              <label className="font-semibold text-lg px-1 text-gray-500 cursor-pointer">
-                <FontAwesomeIcon icon={faPaperclip} />
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileChange}
-                  accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                />
-              </label>
-              <Smile className="w-5 h-5 text-gray-600" />
+              <div className="flex space-x-3">
+                <label className="font-semibold text-lg px-1 text-gray-500 cursor-pointer">
+                  <FontAwesomeIcon icon={faPaperclip} />
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileChange}
+                    accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  />
+                </label>
+                <button>
+                  <Smile className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
             </div>
           </div>
-          <div className="flex items-center mt-auto">
+          <div className="flex items-center space-x-2 mt-auto pt-auto">
             <button
               onClick={sendMessage}
-              className="w-12 h-12 bg-[#f37c7c] hover:bg-[#ef6061] rounded-xl flex items-center justify-center transition-colors"
+              className="w-12 h-12 bgcolor-500 hover:bg-[#f37c7c] rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
             >
               <Send className="w-5 h-5 text-white" />
             </button>
           </div>
         </div>
       </div>
-
-      {showInfo && (
-        <div className="mt-2 z-10 w-72 bg-white border-l border-gray-200 shadow-lg p-4">
-          <h3 className="text-sm font-semibold mb-2">Group Info</h3>
-          <p className="text-xs text-gray-600">Group Name: {conversation.group_name}</p>
-          <p className="text-xs text-gray-600">Created By: {conversation.created_by}</p>
-        </div>
-      )}
     </div>
   );
 };

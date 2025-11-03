@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { createSocket, getSocket } from "../socket";
 import ChatUserInfo from "./ChatUserInfo";
+import EmojiPicker from "emoji-picker-react";
+
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -35,6 +37,12 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   const [showMenu, setShowMenu] = useState(null);
   const [popupMsg, setPopupMsg] = useState(""); // ✅ popup message state
 const [showPopup, setShowPopup] = useState(false); // ✅ visibility state
+const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
+
+
+ 
+
 
 const showErrorPopup = (message) => {
   setPopupMsg(message);
@@ -89,55 +97,53 @@ const showErrorPopup = (message) => {
     };
   }, [token, conversation, onNewMessage]);
 
-   
+
 
 const handleFileChange = async (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
-  if (!user.username) {
-    showErrorPopup('Username not available. Please log in again.');
-    return;
-  }
 
   const formData = new FormData();
-  files.forEach((file) => formData.append('file', file));
-  formData.append('username', user.username);
+  files.forEach((file) => formData.append("file", file));
+  formData.append("username", user.username);
 
   try {
     const res = await fetch(`${API_URL}/upload_file`, {
-      method: 'POST',
+      method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
-    if (!res.ok) {
-      const data = await res.json();
-      const errMsg = data.error || 'File upload failed. Please try again.';
-      showErrorPopup(errMsg);
-      console.error('File upload failed:', data);
-      return;
-    }
-
     const data = await res.json();
-    if (data.urls && Array.isArray(data.urls)) {
-      const s = getSocket();
-      data.urls.forEach((url, i) => {
-        const file = files[i];
-        const payload = {
-          token,
-          conversation_id: conversation.id,
-          message: url,
-          message_type: file.type.startsWith('image/') ? 'image' : 'file',
-        };
-        s.emit('send_message', payload);
-      });
-    } else {
-      showErrorPopup('Invalid response from server.');
-      console.error('File upload failed:', data);
-    }
+
+   if (res.ok && (data.urls || data.uploads)) {
+  const s = getSocket();
+  const uploaded = data.uploads || data.urls.map((u, i) => ({
+    url: u,
+    original_name: files[i]?.name,
+  }));
+
+ uploaded.forEach((item, i) => {
+  const url = item.url || item;
+  const originalName = item.original_name || files[i]?.name || "File";
+  const file = files[i];
+
+  const payload = {
+    token,
+    conversation_id: conversation.id,
+    message: url,
+    message_type: file.type.startsWith("image/") ? "image" : "file",
+    original_name: originalName, // 👈 add this
+  };
+  s.emit("send_message", payload);
+});
+
+}
+
+
   } catch (err) {
-    console.error('Upload error:', err);
-    showErrorPopup('Upload failed due to network error.');
+    console.error("Upload error:", err);
+    showErrorPopup("Upload failed due to network error.");
   }
 };
 
@@ -235,10 +241,10 @@ const handleFileChange = async (e) => {
             
             <div className="pl-3">
               <h3 className="text-sm font-semibold text-gray-900 ">
-  {conversation
-    ? conversation.other_username || conversation.username || "No conversation selected"
-    : "No conversation selected"}
-</h3>
+                {conversation
+                  ? conversation.other_username || conversation.username || "No conversation selected"
+                  : "No conversation selected"}
+              </h3>
               <p className="text-xs mt-1">Online</p>
             </div>
           </div>
@@ -259,7 +265,7 @@ const handleFileChange = async (e) => {
             backgroundPosition: "center",
             width: "100%",
           }}
-          className="h-105 pt-4 overflow-y-auto p-4 px-8 hide-scrollbar"
+          className=" pt-4 overflow-y-auto p-4 px-8 hide-scrollbar height-of-msg"
           ref={messagesRef}
         >
 
@@ -322,115 +328,129 @@ const handleFileChange = async (e) => {
                   <div>
                     <div className="flex">
                       <div
-                        className={`w-fit max-w-xs px-3 py-2 rounded-2xl ${
+                        className={`w-fit max-w-xs px-[5px] py-[4px] rounded-xl ${
                           mine
                             ? "bg-[#f37c7c] text-white rounded-br-sm"
                             : "bg-gray-100 text-gray-900 rounded-bl-sm"
                         }`}
                       >
-                        {(() => {
-                          const fileUrl = msg.message;
-                          const fileName = fileUrl.split("/").pop();
-                          let isImage = false;
-                          let isFile = false;
-                          if (msg.message_type === "text") {
-                            // Always treat as text, even if it looks like a file
-                            isImage = false;
-                            isFile = false;
-                          } else if (msg.message_type === "image" || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl)) {
-                            isImage = true;
-                          } else if (msg.message_type === "file" || /\.(pdf|docx?|txt|zip|rar)$/i.test(fileUrl)) {
-                            isFile = true;
-                          }
+                       {(() => {
+  const fileUrl = msg.message;
+  const fileName = fileUrl.split("/").pop();
+  const fileOriginalName = msg.original_name;
+  let isImage = false;
+  let isFile = false;
 
-                          if (isImage) {
-                            return (
-                              <div className="relative group">
-                                <img
-                                  src={fileUrl}
-                                  alt="sent"
-                                  className="max-w-[200px] rounded-lg cursor-pointer transition-transform duration-200 group-hover:scale-[1.03]"
-                                  onClick={() => window.open(fileUrl, "_blank")}
-                                />
-                                <button
-                                  onClick={async () => {
-                                    if (!fileUrl) return;
-                                    try {
-                                      const response = await fetch(fileUrl, { mode: "cors" });
-                                      const blob = await response.blob();
-                                      const blobUrl = window.URL.createObjectURL(blob);
-                                      const link = document.createElement("a");
-                                      link.href = blobUrl;
-                                      link.download = fileName || "download";
-                                      document.body.appendChild(link);
-                                      link.click();
-                                      document.body.removeChild(link);
-                                      // Clean up the blob URL
-                                      window.URL.revokeObjectURL(blobUrl);
-                                    } catch (error) {
-                                      console.error("Download failed:", error);
-                                    }
-                                  }}
-                                  className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition"
-                                >
-                                  <FontAwesomeIcon icon={faCircleDown} />
-                                </button>
-                              </div>
-                            );
-                          } else if (isFile) {
-                            const ext = fileName.split(".").pop().toLowerCase();
-                            let fileIcon = faFile;
-                            let iconColor = "text-gray-500";
-                            if (["pdf"].includes(ext)) {
-                              fileIcon = faFilePdf;
-                              iconColor = "text-red-300";
-                            } else if (["doc", "docx"].includes(ext)) {
-                              fileIcon = faFileWord;
-                              iconColor = "text-blue-300";
-                            } else if (["xls", "xlsx", "csv"].includes(ext)) {
-                              fileIcon = faFileExcel;
-                              iconColor = "text-green-300";
-                            } else if (["zip", "rar", "7z"].includes(ext)) {
-                              fileIcon = faFileZipper;
-                              iconColor = "text-yellow-300";
-                            } else if (["ppt", "pptx"].includes(ext)) {
-                              fileIcon = faFilePowerpoint;
-                              iconColor = "text-orange-300";
-                            } else if (["txt"].includes(ext)) {
-                              fileIcon = faFileLines;
-                              iconColor = "text-gray-300";
-                            }
-                              return (
-                                <div className="bg-white flex items-center space-x-3 border border-gray-300 rounded-lg p-2">
-                                  <div className="bg-gray-100 w-8 h-8 flex items-center justify-center rounded-full text-sm">
-                                    <FontAwesomeIcon icon={fileIcon} className={iconColor} />
-                                  </div>
-                                  <div className="flex-1">
-                                    <p className="text-xs font-semibold text-gray-800 w-44 break-words whitespace-normal">
-                                      {fileName}
-                                    </p>
-                                    <button
-                                      onClick={() => {
-                                        const a = document.createElement("a");
-                                        a.href = fileUrl;
-                                        a.download = fileName;
-                                        a.click();
-                                      }}
-                                      className="text-[10px] text-blue-600"
-                                    >
-                                      Download
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            } else {
-                              return <p className="text-sm break-words">{msg.message}</p>;
-                            }
-                        })()}
+  if (msg.message_type === "text") {
+    isImage = false;
+    isFile = false;
+  } else if (
+    msg.message_type === "image" ||
+    /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl)
+  ) {
+    isImage = true;
+  } else if (
+    msg.message_type === "file" ||
+    /\.(pdf|docx?|txt|zip|rar)$/i.test(fileUrl)
+  ) {
+    isFile = true;
+  }
+
+  if (isImage) {
+    return (
+      <div className="relative group">
+        <img
+          src={fileUrl}
+          alt="sent"
+          className="max-w-[200px] rounded-lg cursor-pointer transition-transform duration-200 group-hover:scale-[1.03]"
+          onClick={() => window.open(fileUrl, "_blank")}
+        />
+        <button
+          onClick={async () => {
+            try {
+              const response = await fetch(fileUrl, { mode: "cors" });
+              const blob = await response.blob();
+              const blobUrl = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = blobUrl;
+              link.download = fileOriginalName || fileName || "image";
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              window.URL.revokeObjectURL(blobUrl);
+            } catch (error) {
+              console.error("Download failed:", error);
+            }
+          }}
+          className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition"
+        >
+          <FontAwesomeIcon icon={faCircleDown} />
+        </button>
+      </div>
+    );
+  } else if (isFile) {
+    const ext = fileName.split(".").pop().toLowerCase();
+    let fileIcon = faFile;
+    let iconColor = "text-gray-500";
+    if (["pdf"].includes(ext)) {
+      fileIcon = faFilePdf;
+      iconColor = "text-red-300";
+    } else if (["doc", "docx"].includes(ext)) {
+      fileIcon = faFileWord;
+      iconColor = "text-blue-300";
+    } else if (["xls", "xlsx", "csv"].includes(ext)) {
+      fileIcon = faFileExcel;
+      iconColor = "text-green-300";
+    } else if (["zip", "rar", "7z"].includes(ext)) {
+      fileIcon = faFileZipper;
+      iconColor = "text-yellow-300";
+    } else if (["ppt", "pptx"].includes(ext)) {
+      fileIcon = faFilePowerpoint;
+      iconColor = "text-orange-300";
+    } else if (["txt"].includes(ext)) {
+      fileIcon = faFileLines;
+      iconColor = "text-gray-300";
+    }
+   function cleanDisplayName(filename) {
+  if (!filename) return "";
+  return filename.replaceAll("_", " ");
+}
+
+
+    return (
+      <div className="bg-white flex items-center space-x-3 border border-gray-300 rounded-lg p-2">
+        <div className="bg-gray-100 w-8 h-8 flex items-center justify-center rounded-full text-sm">
+          <FontAwesomeIcon icon={fileIcon} className={iconColor} />
+        </div>
+        <div className="flex-1">
+    <p className="text-xs font-semibold text-gray-800 w-44 break-words whitespace-normal">
+      {/* Prefer clean name returned by backend */}
+      {fileOriginalName || cleanDisplayName(fileName)}
+    </p>
+
+    <button
+      onClick={() => {
+        const a = document.createElement("a");
+        a.href = fileUrl;
+        a.download = fileOriginalName || cleanDisplayName(fileName);
+        a.click();
+      }}
+      className="text-[10px] text-blue-600"
+    >
+      Download
+    </button>
+  </div>
+      </div>
+    );
+  } else {
+    return <p className="text-sm break-words">{msg.message}</p>;
+  }
+})()}
+
                       </div>
                       {/* 🕹 Three-dot menu (visible on hover) */}
                         <button
-                          className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition"
+                          className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
                           onClick={() => setShowMenu(showMenu === idx ? null : idx)}
                         >
                           <FontAwesomeIcon icon={faEllipsisVertical} />
@@ -506,10 +526,10 @@ const handleFileChange = async (e) => {
 
 
         {/* Input Box */}
-        <div className="flex gap-2 border-t border-gray-300 px-4 py-2">
-          <div className="w-full rounded-lg bg-gray-100 pb-2 mt-2">
+        <div className="flex gap-2 border-t border-gray-300 px-4 py-2 pb-0">
+          <div className="w-full rounded-lg bg-gray-100 pb-0 mt-2 textarea-height">
               <textarea
-                className="w-full h-12 outline-none resize-none text-sm p-3"
+                className="w-full h-12 outline-none resize-none text-sm p-3 "
                 placeholder="Type a message..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -526,16 +546,35 @@ const handleFileChange = async (e) => {
                   <label className=" font-semibold text-lg px-1 text-gray-500 cursor-pointer">
                     <FontAwesomeIcon icon={faPaperclip} />
                     <input
-  type="file"
-  multiple
-  className="hidden"
-  onChange={handleFileChange}
-  accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-/>
-                  </label>
-                  <button>
-                    <Smile className="w-5 h-5 text-gray-600" />
-                  </button>
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                      accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    />
+                                      </label>
+                                      <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        className="focus:outline-none"
+                      >
+                        <Smile className=" text-gray-600" />
+                      </button>
+
+                        {showEmojiPicker && (
+                          <div className="absolute bottom-10 left-0 z-50">
+                            <EmojiPicker
+                              onEmojiClick={(emojiData) => {
+                                setInput((prev) => prev + emojiData.emoji);
+                                setShowEmojiPicker(false);
+                              }}
+                              theme="light"
+                            />
+                          </div>
+                        )}
+                      </div>
+
                 </div>
               </div>
           </div>

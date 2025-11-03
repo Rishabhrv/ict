@@ -3,6 +3,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faHouseChimney } from "@fortawesome/free-solid-svg-icons";
+import Logo from "./logo.png";
 
 const Slidebar = ({ user }) => {
   const userInitials = user?.username ? user.username.slice(0, 2).toUpperCase() : "JD";
@@ -11,7 +12,7 @@ const Slidebar = ({ user }) => {
     <div className="w-25 bgcolor flex flex-col items-center py-4 space-y-3 h-screen rounded-r-2xl shadow-md">
       {/* --- Logo / Top Icon --- */}
       <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center font-bold text-bgcolor text-xl">
-        C
+        <img src={Logo} alt="Logo" className="p-1" />
       </div>
 
       {/* --- Main Nav Buttons --- */}

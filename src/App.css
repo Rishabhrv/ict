@@ -7,6 +7,33 @@
   pointer-events: none;
 }
 
+.height-of-msg{
+  height: 75vh;
+}
+
+.textarea-height{
+  height: 17vh;
+}
+
+.height-userlist{
+  height: 76vh;
+}
+
+@media (min-width: 1300px) {
+  .height-of-msg {
+    height: 67vh;
+  }
+
+  
+}
+
+@media (max-width: 1299px) and (min-width: 768px) {
+  .height-of-msg {
+    height: 60vh;
+  }
+}
+
+
 @media (prefers-reduced-motion: no-preference) {
   .App-logo {
     animation: App-logo-spin infinite 20s linear;
@@ -26,6 +53,16 @@
 
 .App-link {
   color: #61dafb;
+}
+
+/* Hide scrollbar but keep scrolling */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* for Internet Explorer, Edge */
+  scrollbar-width: none;     /* for Firefox */
 }
 
 @keyframes App-logo-spin {

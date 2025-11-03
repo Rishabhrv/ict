@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFile, faImage, faPlus } from "@fortawesome/free-solid-svg-icons";
-import {  Search, MessagesSquare  } from "lucide-react";
+import {  Search, MessagesSquare, X   } from "lucide-react";
 import AddMemberSlider from "../components/AddMemberSlider";
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -107,7 +107,6 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
 
       const data = await res.json();
       if (data.success) {
-        alert("Conversation created!");
         setConvos((prev) => [...prev, { ...data.conversation, hasConversation: true }]);
         setSearchTerm("");
         onSelectConversation(data.conversation);
@@ -163,8 +162,17 @@ const timeAgo = (dateString) => {
           </button> */}
           <button
   onClick={async () => {
+    if (showAllUsers) {
+      // 🔴 If already showing all users, undo it
+      setShowAllUsers(false);
+      setSearchResults([]);
+      setSearchTerm("");
+      return;
+    }
+
+    // 🟢 Otherwise, show all users
     setLoading(true);
-    setShowAllUsers(true); // ✅ tell component to show all users
+    setShowAllUsers(true);
     try {
       const res = await fetch(`${API_URL}/all_users`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -172,7 +180,6 @@ const timeAgo = (dateString) => {
       const data = await res.json();
       const userList = Array.isArray(data) ? data : [];
 
-      // Tag them as "no conversation"
       const existingUsernames = new Set(convos.map((c) => c.other_username));
       const result = userList.map((u) => ({
         ...u,
@@ -180,7 +187,7 @@ const timeAgo = (dateString) => {
       }));
 
       setSearchResults(result);
-      setSearchTerm(""); // clear search bar
+      setSearchTerm("");
     } catch (err) {
       console.error("Error fetching all users:", err);
     } finally {
@@ -188,9 +195,13 @@ const timeAgo = (dateString) => {
     }
   }}
   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-  title="Show all users"
+  title={showAllUsers ? "Hide all users" : "Show all users"}
 >
-  <MessagesSquare className="w-5 h-5 text-gray-600" />
+  {showAllUsers ? (
+    <X className="w-5 h-5 text-gray-600" />
+  ) : (
+    <MessagesSquare className="w-5 h-5 text-gray-600" />
+  )}
 </button>
 
           </div>
@@ -227,7 +238,7 @@ const timeAgo = (dateString) => {
       </div>
 
       {/* Conversation list */}
-      <div className="overflow-y-auto h-125 hide-scrollbar">
+      <div className="overflow-y-auto height-userlist hide-scrollbar">
         {loading && <div className="p-4 text-gray-500">Searching...</div>}
 
         {Array.isArray(listToShow) && listToShow.length > 0 ? (
@@ -255,10 +266,10 @@ const timeAgo = (dateString) => {
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
                   <div
-  className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-semibold ${
+  className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg font-semibold ${
     c.type === "group"
       ? "bg-gray-100 text-gray-600"
-      : "bg-gradient-to-br from-[#f37c7c] to-[#ef6061] text-white"
+      : "bg-gradient-to-br from-[#ff8181ff] to-[#ff5f5fff] text-white"
   }`}
 >
   {c.group_image ? (
@@ -280,11 +291,11 @@ const timeAgo = (dateString) => {
                 {/* Chat Info */}
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-gray-900 truncate">{name}</h3>
+                    <h3 className="font-semibold text-gray-900 truncate text-[16px]">{name}</h3>
                     <span className="text-xs text-gray-500 ml-2">{timeAgo(c.last_time)}</span>
                   </div>
 
-                  <p className="text-sm text-gray-600 truncate flex items-center gap-1">
+                  <p className="text-xs text-gray-600 truncate flex items-center gap-1">
                     {(() => {
                       if (!c.last_message) return c.email || "No messages yet";
                       if (c.last_message_type === "text") return c.last_message;
@@ -293,7 +304,7 @@ const timeAgo = (dateString) => {
                         return (
                           <>
                             <FontAwesomeIcon icon={faFile} className="text-gray-400" />
-                            <span className="truncate max-w-[150px]">{fileName}</span>
+                            <span className="truncate max-w-[80%]">{fileName}</span>
                           </>
                         );
                       }
