@@ -20,10 +20,13 @@ import {
 import {
   Smile,
   Send,
+  CheckCheck,
 } from "lucide-react";
 import { createSocket, getSocket } from "../socket";
 import ChatUserInfo from "./ChatUserInfo";
 import EmojiPicker from "emoji-picker-react";
+import BackImage from "../components/Images/1211.jpg";
+import ShareMessageModal from "./ShareMessageModal";
 
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -38,6 +41,74 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   const [popupMsg, setPopupMsg] = useState(""); // ✅ popup message state
 const [showPopup, setShowPopup] = useState(false); // ✅ visibility state
 const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+const [showShareModal, setShowShareModal] = useState(false);
+const [messageToShare, setMessageToShare] = useState(null);
+const [replyingTo, setReplyingTo] = useState(null);
+const [selectedShareUsers, setSelectedShareUsers] = useState([])
+
+
+const sendShareMessage = async () => {
+  if (!selectedShareUsers.length || !messageToShare) return;
+
+  try {
+    const s = getSocket();
+
+    // ✅ Loop over all selected users
+    for (const targetUserId of selectedShareUsers) {
+      // Step 1: Create or find conversation
+      const res = await fetch(`${API_URL}/createConversation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user1_id: user.id,
+          user2_id: targetUserId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error("Failed to create conversation");
+
+      const newConv = data.conversation;
+
+      // Step 2: Send message via socket
+      if (s) {
+        const payload = {
+          token,
+          conversation_id: newConv.id,
+          message: messageToShare.message,
+          message_type: messageToShare.message_type,
+        };
+        s.emit("send_message", payload);
+
+        // Optional: notify UI
+        if (typeof onNewMessage === "function") {
+          onNewMessage({
+            conversationId: newConv.id,
+            message: messageToShare.message,
+            message_type: messageToShare.message_type,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    // ✅ Success cleanup
+    setShowShareModal(false);
+    setMessageToShare(null);
+    setSelectedShareUsers([]);
+    showErrorPopup("Message shared successfully ✅");
+  } catch (err) {
+    console.error("Share error:", err);
+    showErrorPopup("Failed to share message ❌");
+  }
+};
+
+
+
+
 
 
 
@@ -96,6 +167,8 @@ const showErrorPopup = (message) => {
       if (s) s.off("new_message");
     };
   }, [token, conversation, onNewMessage]);
+
+  
 
 
 
@@ -189,22 +262,36 @@ const handleFileChange = async (e) => {
 
   // ✅ Send message
   const sendMessage = () => {
-    if (!input.trim() || !conversation) return;
-    const s = getSocket();
-    const payload = {
-  token,
-  conversation_id: conversation.id,
-  message: input.trim(),
-  message_type: "text",  // ✅ add message_type
+  if (!input.trim() || !conversation) return;
+  const s = getSocket();
+
+  const payload = {
+    token,
+    conversation_id: conversation.id,
+    message: input.trim(),
+    message_type: "text",
+    reply_to: replyingTo ? replyingTo.id : null,  // ✅ Add this
+  };
+
+  if (s) {
+    s.emit("send_message", payload);
+    setInput("");
+    setReplyingTo(null); // ✅ Clear after sending
+  } else {
+    console.error("Socket not connected");
+  }
 };
 
-    if (s) {
-      s.emit("send_message", payload);
-      setInput("");
-    } else {
-      console.error("Socket not connected");
-    }
-  };
+
+  useEffect(() => {
+  if (showShareModal) {
+    fetch(`${API_URL}/all_users`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .catch((err) => console.error("User fetch error:", err));
+  }
+}, [showShareModal, token]);
 
 
     // ✅ If no conversation selected, show empty state
@@ -239,13 +326,13 @@ const handleFileChange = async (e) => {
               
             </div>
             
-            <div className="pl-3">
-              <h3 className="text-sm font-semibold text-gray-900 ">
+            <div className="pl-3 pt-[4px]">
+              <h3 className="text-lg font-semibold text-gray-900">
                 {conversation
                   ? conversation.other_username || conversation.username || "No conversation selected"
                   : "No conversation selected"}
               </h3>
-              <p className="text-xs mt-1">Online</p>
+              {/* <p className="text-xs mt-1">Online</p> */}
             </div>
           </div>
           <div
@@ -261,13 +348,16 @@ const handleFileChange = async (e) => {
       {/* Messages */}
         <div
           style={{
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            width: "100%",
-          }}
+    backgroundImage: `url(${BackImage})`,
+    backgroundRepeat: "repeat",       // ✅ Tile the image in all directions
+    backgroundSize: "300px 300px",           // ✅ Keep original size for true repeat
+    backgroundPosition: "top left",   // ✅ Start from top-left
+    width: "100%",
+  }}
           className=" pt-4 overflow-y-auto p-4 px-8 hide-scrollbar height-of-msg"
           ref={messagesRef}
         >
+
 
           {showPopup && (
   <div className="fixed top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300">
@@ -327,13 +417,93 @@ const handleFileChange = async (e) => {
                   >
                   <div>
                     <div className="flex">
+                      <div>
                       <div
-                        className={`w-fit max-w-xs px-[5px] py-[4px] rounded-xl ${
+                        className={`w-fit max-w-xs px-[5px] py-[4px] rounded-xl  ${
                           mine
-                            ? "bg-[#f37c7c] text-white rounded-br-sm"
-                            : "bg-gray-100 text-gray-900 rounded-bl-sm"
+                            ? "bg-[#f37c7c] text-white rounded-br-sm ml-15"
+                            : "bg-gray-300 text-gray-900 rounded-bl-sm"
                         }`}
                       >
+                        
+        {msg.reply_to && (
+  <div
+    className={`text-xs mb-1 p-1 rounded-md  ${
+      mine ? "border-white bg-white text-red-700" : "border-gray-400 bg-white text-red-700"
+    }`}
+  >
+    {/* 🧍 Username */}
+    <p className="truncate font-semibold">
+      {msg.reply_to_user || "User"}
+    </p>
+
+    {/* 🧠 Auto-detect message type */}
+    {(() => {
+      const replyText = msg.reply_to_text || "";
+
+      // 🖼️ IMAGE DETECTION
+      if (
+        replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
+        (replyText.startsWith("http") &&
+          replyText.includes("/uploads/") &&
+          replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
+      ) {
+        return (
+          <div
+            className="flex items-center gap-2 mt-1 cursor-pointer"
+          >
+            <img
+              src={replyText}
+              alt="reply-img"
+              className="w-[100%] h-8 rounded"
+            />
+            
+          </div>
+        );
+      }
+
+      // 📎 FILE DETECTION (with file-type icons)
+      if (
+        replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
+        (replyText.startsWith("http") &&
+          replyText.includes("/uploads/") &&
+          replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i))
+      ) {
+        const fileName = replyText.split("/").pop();
+        const ext = fileName.split(".").pop().toLowerCase();
+
+        let fileIcon = "📎";
+        if (["pdf"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePdf} />; // PDF
+        else if (["doc", "docx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileWord} />; // Word
+        else if (["xls", "xlsx", "csv"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileExcel} />; // Excel
+        else if (["ppt", "pptx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePowerpoint} />; // PowerPoint
+        else if (["zip", "rar", "7z"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileZipper} />; // Compressed
+        else if (["txt"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFile} />; // Text file
+
+        return (
+          <div
+            className="flex items-center gap-2 mt-1 cursor-pointer"
+          >
+            <span className="text-[13px]">{fileIcon}</span>
+            <span className="truncate max-w-[120px]">{fileName}</span>
+          </div>
+        );
+      }
+
+      // 💬 TEXT fallback
+      return (
+        <p className="truncate text-red-700 text-[12px] mt-1">
+          {replyText.length > 70
+            ? replyText.slice(0, 70) + "..."
+            : replyText}
+        </p>
+      );
+    })()}
+  </div>
+)}
+
+
+
                        {(() => {
   const fileUrl = msg.message;
   const fileName = fileUrl.split("/").pop();
@@ -443,10 +613,33 @@ const handleFileChange = async (e) => {
       </div>
     );
   } else {
-    return <p className="text-sm break-words">{msg.message}</p>;
+    return <p className="text-sm break-words ml-1 text-right">{msg.message}</p>;
   }
 })()}
-
+</div>
+                  <div className={`flex  ${mine ? "justify-end" : ""}`}>
+                    <p className={`text-[11px] pt-1 text-gray-500 ${mine ? "text-right" : "text-left"}`}>
+                      {(() => {
+                        const ts = msg.timestamp;
+                        const match = ts?.match(/\d{2}:\d{2}:\d{2}/);
+                        if (!match) return "";
+                        const [h, m] = match[0].split(":").map(Number);
+                        let hours = h;
+                        const ampm = hours >= 12 ? "PM" : "AM";
+                        hours = hours % 12 || 12;
+                        return `${hours.toString().padStart(2, "0")}:${m
+                          .toString()
+                          .padStart(2, "0")} ${ampm}`;
+                      })()}
+                    </p>
+                    {mine ? 
+                    <p className="mt-auto">
+                      <CheckCheck className={`w-[70%] h-[60%] pl-1 ${
+                        msg.seen === 1 ? "text-blue-500 " : "text-gray-400"
+                      }`}/>
+                    </p>
+                    : ""}
+                  </div>
                       </div>
                       {/* 🕹 Three-dot menu (visible on hover) */}
                         <button
@@ -463,19 +656,30 @@ const handleFileChange = async (e) => {
                             } -top-0  bg-white border border-gray-200 rounded-lg shadow-md z-20 flex `}
                           >
                             <button
-                              onClick={() => console.log("Reply:", msg.id)}
-                              className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
-                            >
-                              <FontAwesomeIcon icon={faReply} className="" /> 
-                            </button>
+                            title="Reply"
+  onClick={() => {
+    
+    setReplyingTo(msg);  // ✅ Store the message being replied to
+    setShowMenu(null);   // Close menu
+  }}
+  className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+>
+  <FontAwesomeIcon icon={faReply} className="mr-1" />
+</button>
+
                             <button
-                              onClick={() => console.log("Forward:", msg.id)}
+                              title="Share"
+                              onClick={() => {
+                                setMessageToShare(msg);   
+                                setShowShareModal(true);  
+                              }}
                               className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
                             >
-                              <FontAwesomeIcon icon={faShareFromSquare} className="" /> 
+                              <FontAwesomeIcon icon={faShareFromSquare} /> 
                             </button>
                             {mine ? 
                             <button
+                                title="Delete"
                                 onClick={async () => {   // ✅ add async here
                                   if (!window.confirm("Delete this message?")) return;
                                   try {
@@ -501,20 +705,7 @@ const handleFileChange = async (e) => {
                           </div>
                         )}
                     </div>
-                    <p className={`text-xs pt-1 text-gray-500 ${mine ? "text-right" : "text-left"}`}>
-                      {(() => {
-                        const ts = msg.timestamp;
-                        const match = ts?.match(/\d{2}:\d{2}:\d{2}/);
-                        if (!match) return "";
-                        const [h, m] = match[0].split(":").map(Number);
-                        let hours = h;
-                        const ampm = hours >= 12 ? "PM" : "AM";
-                        hours = hours % 12 || 12;
-                        return `${hours.toString().padStart(2, "0")}:${m
-                          .toString()
-                          .padStart(2, "0")} ${ampm}`;
-                      })()}
-                    </p>
+                    
                   </div>
                 </div>
                 );
@@ -526,10 +717,33 @@ const handleFileChange = async (e) => {
 
 
         {/* Input Box */}
-        <div className="flex gap-2 border-t border-gray-300 px-4 py-2 pb-0 mt-auto">
+        <div className="flex gap-2 border-t border-gray-300 px-4 py-2  mt-auto">
           <div className="w-full rounded-lg bg-gray-100 pb-0 mt-2 textarea-height ">
+            {replyingTo && (
+  <div className="flex justify-between items-center bg-gray-200 rounded-t-lg p-2 px-3 border-l-4 border-[#f37c7c] mb-1">
+    <div className="text-sm text-gray-800 w-[90%]">
+      <p className="font-semibold text-gray-700">
+        Replying to {replyingTo.sender_id === user.id ? "yourself" : replyingTo.sender_name || "User"}
+      </p>
+      <p className="truncate text-gray-600 text-xs">
+        {replyingTo.message_type === "text"
+          ? replyingTo.message
+          : replyingTo.message_type === "image"
+          ? "📷 Image"
+          : "📎 File"}
+      </p>
+    </div>
+    <button
+      onClick={() => setReplyingTo(null)}
+      className="text-gray-500 hover:text-gray-700"
+    >
+      ✖
+    </button>
+  </div>
+)}
+
               <textarea
-                className="w-full h-12 outline-none resize-none text-sm p-3 "
+                className="w-full text-height outline-none resize-none text-sm p-3 "
                 placeholder="Type a message..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -541,7 +755,7 @@ const handleFileChange = async (e) => {
                 }}
               />
 
-              <div className="flex justify-between items-center mt-[3%] text-gray-600 px-2 pt-auto">
+              <div className="flex justify-between items-center text-gray-600 px-2 pt-auto">
                 <div className="flex space-x-3">
                   <label className=" font-semibold text-lg px-1 text-gray-500 cursor-pointer">
                     <FontAwesomeIcon icon={faPaperclip} />
@@ -597,6 +811,19 @@ const handleFileChange = async (e) => {
           />
         </div>
       )}
+
+
+  <ShareMessageModal
+  isOpen={showShareModal}
+  onClose={() => setShowShareModal(false)}
+  token={token}
+  API_URL={API_URL}
+  currentUser={user}
+  onShare={(selectedUserIds) => {
+    setSelectedShareUsers(selectedUserIds);
+    sendShareMessage(); // or handle your logic here
+  }}
+/>
 
 
     </div>

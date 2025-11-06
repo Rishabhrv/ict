@@ -148,7 +148,7 @@ const timeAgo = (dateString) => {
 
 
   return (
-    <div className="w-80 min-w-90 bg-white border-r border-gray-200 flex flex-col">
+    <div className="w-80 min-w-80 bg-white border-r border-gray-200 flex flex-col">
       {/* Header */}
       <div className="p-4 pb-0 border-b border-gray-200 pt-4">
         <div className="flex items-center justify-between mb-4">

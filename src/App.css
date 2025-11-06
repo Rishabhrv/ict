@@ -12,11 +12,15 @@
 }
 
 .textarea-height{
-  height: 18vh;
+  height: 17vh;
 }
 
 .height-userlist{
   height: 76vh;
+}
+
+.text-height{
+  height: 11vh;
 }
 
 @media (min-width: 1300px) {
