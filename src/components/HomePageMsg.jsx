@@ -16,6 +16,7 @@ import {
   faShareFromSquare,
   faReply,
   faEllipsisVertical,
+  faCircleInfo,
 } from "@fortawesome/free-solid-svg-icons";
 import {
   Smile,
@@ -45,7 +46,13 @@ const [showShareModal, setShowShareModal] = useState(false);
 const [messageToShare, setMessageToShare] = useState(null);
 const [replyingTo, setReplyingTo] = useState(null);
 const [selectedShareUsers, setSelectedShareUsers] = useState([])
-
+const textareaRef = useRef(null);
+const [reactions, setReactions] = useState({});
+const [selectedMsgInfo, setSelectedMsgInfo] = useState(null);
+const [reactionPicker, setReactionPicker] = useState({
+  show: false,
+  msgId: null,
+});
 
 const sendShareMessage = async () => {
   if (!selectedShareUsers.length || !messageToShare) return;
@@ -111,6 +118,31 @@ const sendShareMessage = async () => {
 
 
 
+// ✅ Handle adding a reaction
+const handleAddReaction = (msgId, emoji) => {
+  // Update UI instantly
+  setReactions((prev) => {
+    const existing = prev[msgId] || [];
+    const updated = existing.includes(emoji)
+      ? existing.filter((e) => e !== emoji)
+      : [...existing, emoji];
+    return { ...prev, [msgId]: updated };
+  });
+
+  // ✅ Send to backend via Socket.IO
+  const s = getSocket();
+  if (s) {
+    s.emit("send_reaction", {
+      token,
+      message_id: msgId,
+      emoji,
+    });
+  }
+};
+
+
+// ✅ Close Info Modal
+const closeInfoModal = () => setSelectedMsgInfo(null);
 
  
 
@@ -238,11 +270,23 @@ const handleFileChange = async (e) => {
     }
 
     fetch(`${API_URL}/messages/${conversation.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => setMessages(data))
-      .catch((err) => console.error(err));
+  headers: { Authorization: `Bearer ${token}` },
+})
+  .then((r) => r.json())
+  .then((data) => {
+    setMessages(data);
+
+    // 🧩 Preload reactions into state for instant display
+    const reactionsMap = {};
+    data.forEach((msg) => {
+      if (msg.reactions && Array.isArray(msg.reactions)) {
+        reactionsMap[msg.id] = msg.reactions.map((r) => r.emoji);
+      }
+    });
+    setReactions(reactionsMap);
+  })
+  .catch((err) => console.error(err));
+
 
     const s = getSocket();
     if (s && conversation) s.emit("join", { token, conversation_id: conversation.id });
@@ -294,6 +338,23 @@ const handleFileChange = async (e) => {
 }, [showShareModal, token]);
 
 
+
+
+useEffect(() => {
+  const s = getSocket();
+  if (!s) return;
+
+  s.on("reaction_update", (data) => {
+    setReactions((prev) => ({
+      ...prev,
+      [data.message_id]: data.reactions.map((r) => r.emoji),
+    }));
+  });
+
+  return () => s.off("reaction_update");
+}, []);
+
+
     // ✅ If no conversation selected, show empty state
   if (!conversation) {
     return (
@@ -310,9 +371,17 @@ const handleFileChange = async (e) => {
 
   return (
     <div className="flex w-full">
-      <div className="w-full">
+      <div 
+      style={{
+    backgroundImage: `url(${BackImage})`,
+    backgroundRepeat: "repeat",       // ✅ Tile the image in all directions
+    backgroundSize: "300px 300px",           // ✅ Keep original size for true repeat
+    backgroundPosition: "top left",   // ✅ Start from top-left
+    width: "100%",
+  }}
+      className="w-full">
         {/* Header */}
-        <div className="flex border-b border-gray-200 py-4 px-6 justify-between">
+        <div className="flex border-b border-gray-200 py-4 px-6 justify-between bg-white">
           <div className="flex">
             <div className="relative">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold bg-gradient-to-br from-[#f37c7c] to-[#ef6061] text-white">
@@ -347,14 +416,8 @@ const handleFileChange = async (e) => {
 
       {/* Messages */}
         <div
-          style={{
-    backgroundImage: `url(${BackImage})`,
-    backgroundRepeat: "repeat",       // ✅ Tile the image in all directions
-    backgroundSize: "300px 300px",           // ✅ Keep original size for true repeat
-    backgroundPosition: "top left",   // ✅ Start from top-left
-    width: "100%",
-  }}
-          className=" pt-4 overflow-y-auto p-4 px-8 hide-scrollbar height-of-msg"
+          
+          className=" pt-4 overflow-y-auto p-4 px-4 hide-scrollbar height-of-msg pb-1"
           ref={messagesRef}
         >
 
@@ -365,7 +428,7 @@ const handleFileChange = async (e) => {
   </div>
 )}
         {(() => {
-          if (!messages.length) return <p className="text-center text-gray-400">No messages yet</p>;
+          if (!messages.length) return <p className="text-center text-gray-400 height-of-msg">No messages yet</p>;
       
           // ✅ Group messages by date
           const grouped = messages.reduce((acc, msg) => {
@@ -616,7 +679,21 @@ const handleFileChange = async (e) => {
     return <p className="text-sm break-words ml-1 text-right">{msg.message}</p>;
   }
 })()}
+
 </div>
+                  {reactions[msg.id]?.length > 0 && (
+                    <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+                      {reactions[msg.id].map((emoji, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                          onClick={() => handleAddReaction(msg.id, emoji)} // toggle off
+                        >
+                          <span>{emoji}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className={`flex  ${mine ? "justify-end" : ""}`}>
                     <p className={`text-[11px] pt-1 text-gray-500 ${mine ? "text-right" : "text-left"}`}>
                       {(() => {
@@ -643,7 +720,7 @@ const handleFileChange = async (e) => {
                       </div>
                       {/* 🕹 Three-dot menu (visible on hover) */}
                         <button
-                          className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                          className={`opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer  `}
                           onClick={() => setShowMenu(showMenu === idx ? null : idx)}
                         >
                           <FontAwesomeIcon icon={faEllipsisVertical} />
@@ -657,15 +734,14 @@ const handleFileChange = async (e) => {
                           >
                             <button
                             title="Reply"
-  onClick={() => {
-    
-    setReplyingTo(msg);  // ✅ Store the message being replied to
-    setShowMenu(null);   // Close menu
-  }}
-  className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
->
-  <FontAwesomeIcon icon={faReply} className="mr-1" />
-</button>
+                              onClick={() => {
+                                setReplyingTo(msg);  // ✅ Store the message being replied to
+                                setShowMenu(null);   // Close menu
+                              }}
+                              className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                            >
+                              <FontAwesomeIcon icon={faReply} className="mr-1" />
+                            </button>
 
                             <button
                               title="Share"
@@ -677,6 +753,53 @@ const handleFileChange = async (e) => {
                             >
                               <FontAwesomeIcon icon={faShareFromSquare} /> 
                             </button>
+                            {/* 😄 Reaction Button */}
+                            <div className="relative">
+                              <button
+                                title="React"
+                                onClick={() => {
+                                  setReactionPicker((prev) => ({
+                                    show: !(prev.show && prev.msgId === msg.id),
+                                    msgId: msg.id,
+                                  }));
+                                }}
+                                className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                              >
+                                <Smile className="w-4 h-4 text-gray-600 cursor-pointer inline mr-1" />
+                              </button>
+
+                            {/* 🎯 Mini Emoji Bar */}
+                            {reactionPicker.show && reactionPicker.msgId === msg.id && (
+                              <div className="absolute top-full left-0 bg-white shadow-lg rounded-lg p-2 flex space-x-2 z-50">
+                                {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    onClick={() => {
+                                      handleAddReaction(msg.id, emoji);
+                                      setReactionPicker({ show: false, msgId: null });
+                                    }}
+                                    className="text-lg hover:scale-125 transition-transform"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+
+{/* ℹ️ Message Info */}
+<button
+  title="Info"
+  onClick={() => {
+    setSelectedMsgInfo(msg);
+    setShowMenu(null);
+  }}
+  className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+>
+  <FontAwesomeIcon icon={faCircleInfo} className="mr-1" />
+</button>
+
                             {mine ? 
                             <button
                                 title="Delete"
@@ -701,6 +824,7 @@ const handleFileChange = async (e) => {
                                 <FontAwesomeIcon icon={faTrash} />
                               </button>
                             : ""}
+
                             
                           </div>
                         )}
@@ -713,94 +837,148 @@ const handleFileChange = async (e) => {
             </div>
           ));
         })()}
+
+        {/* 📜 Message Info Modal */}
+{selectedMsgInfo && (
+  <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+    <div className="bg-white w-80 rounded-lg shadow-lg p-5 relative">
+      <h3 className="text-lg font-semibold mb-3 flex items-center">
+        <FontAwesomeIcon icon={faCircleInfo} className="mr-2 text-gray-600" />
+        Message Info
+      </h3>
+
+      <div className="text-sm space-y-2">
+        <p className="flex justify-between">
+          <span className="text-gray-600">Status:</span>
+          <span className="font-medium text-gray-900">
+            {selectedMsgInfo.seen === 1 ? "Seen ✅" : "Delivered 📤"}
+          </span>
+        </p>
+        <p className="flex justify-between text-gray-600">
+          <span>Time Sent:</span>
+          <span>
+            {new Date(selectedMsgInfo.timestamp).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </p>
       </div>
 
-
-        {/* Input Box */}
-        <div className="flex gap-2 border-t border-gray-300 px-4 py-2  mt-auto">
-          <div className="w-full rounded-lg bg-gray-100 pb-0 mt-2 textarea-height ">
-            {replyingTo && (
-  <div className="flex justify-between items-center bg-gray-200 rounded-t-lg p-2 px-3 border-l-4 border-[#f37c7c] mb-1">
-    <div className="text-sm text-gray-800 w-[90%]">
-      <p className="font-semibold text-gray-700">
-        Replying to {replyingTo.sender_id === user.id ? "yourself" : replyingTo.sender_name || "User"}
-      </p>
-      <p className="truncate text-gray-600 text-xs">
-        {replyingTo.message_type === "text"
-          ? replyingTo.message
-          : replyingTo.message_type === "image"
-          ? "📷 Image"
-          : "📎 File"}
-      </p>
+      <button
+        onClick={closeInfoModal}
+        className="absolute top-2 right-3 text-gray-500 hover:text-gray-700 text-lg"
+      >
+        ✖
+      </button>
     </div>
-    <button
-      onClick={() => setReplyingTo(null)}
-      className="text-gray-500 hover:text-gray-700"
-    >
-      ✖
-    </button>
   </div>
 )}
 
-              <textarea
-                className="w-full text-height outline-none resize-none text-sm p-3 "
-                placeholder="Type a message..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-              />
 
-              <div className="flex justify-between items-center text-gray-600 px-2 pt-auto">
-                <div className="flex space-x-3">
-                  <label className=" font-semibold text-lg px-1 text-gray-500 cursor-pointer">
-                    <FontAwesomeIcon icon={faPaperclip} />
-                    <input
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileChange}
-                      accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    />
-                                      </label>
-                                      <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowEmojiPicker((prev) => !prev)}
-                        className="focus:outline-none"
-                      >
-                        <Smile className=" text-gray-600 cursor-pointer" />
-                      </button>
-
-                        {showEmojiPicker && (
-                          <div className="absolute bottom-10 left-0 z-50">
-                            <EmojiPicker
-                              onEmojiClick={(emojiData) => {
-                                setInput((prev) => prev + emojiData.emoji);
-                                setShowEmojiPicker(false);
-                              }}
-                              theme="light"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                </div>
-              </div>
-          </div>
-            <div className="flex items-center space-x-2 mt-auto pt-auto">
-              <button
-                onClick={sendMessage}
-                className="w-12 h-12 bgcolor-500 hover:bg-[#f37c7c] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer"
-              >
-                <Send className="w-5 h-5 text-white" />
-              </button>
+         {/* Input Section */}
+  <div className="sticky bottom-0 z-10">
+    {replyingTo && (
+          <div className="flex justify-between items-center bg-gray-200 rounded-t-lg p-2 px-3 border-l-4 border-[#f37c7c] mb-1 w-[95%]">
+            <div className="text-sm text-gray-800 w-[90%]">
+              <p className="font-semibold text-gray-700">
+                Replying to{" "}
+                {replyingTo.sender_id === user.id
+                  ? "yourself"
+                  : replyingTo.sender_name || "User"}
+              </p>
+              <p className="truncate text-gray-600 text-xs">
+                {replyingTo.message_type === "text"
+                  ? replyingTo.message
+                  : replyingTo.message_type === "image"
+                  ? "📷 Image"
+                  : "📎 File"}
+              </p>
             </div>
+            <button
+              onClick={() => setReplyingTo(null)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✖
+            </button>
+          </div>
+        )}
+    <div className="flex gap-2 ">
+      <div className=" flex w-full rounded-3xl bg-white pb-0 textarea-height shadow-all-sides py-2 ">
+        <div className="flex justify-between items-center text-gray-600 px-2">
+          <div className="flex space-x-2">
+            <label className="font-semibold text-lg px-1 text-gray-500 cursor-pointer">
+              <FontAwesomeIcon icon={faPaperclip} />
+              <input
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+                accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              />
+            </label>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker((prev) => !prev)}
+                className="focus:outline-none"
+              >
+                <Smile className="text-gray-600 cursor-pointer mt-1" />
+              </button>
+
+              {showEmojiPicker && (
+                <div className="absolute bottom-10 left-0 z-50">
+                  <EmojiPicker
+                    onEmojiClick={(emojiData) => {
+                      setInput((prev) => prev + emojiData.emoji);
+                      setShowEmojiPicker(false);
+                    }}
+                    theme="light"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+
+        <textarea
+  ref={textareaRef}
+  className="w-full outline-none text-sm mt-[1.5%] overflow-y-auto"
+  placeholder="Type a message..."
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  onInput={(e) => {
+    e.target.style.height = "auto"; // reset height to measure
+    const maxHeight = 150; // pixels (you can change)
+    e.target.style.height =
+      e.target.scrollHeight > maxHeight
+        ? `${maxHeight}px`
+        : `${e.target.scrollHeight}px`;
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }}
+/>
+
+
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={sendMessage}
+          className="w-12 h-12 bg-[#f37c7c] hover:bg-[#e46b6b] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer"
+        >
+          <Send className="w-5 h-5 text-white" />
+        </button>
+      </div>
+    </div>
+  </div>
+      </div>
+        
       </div>
       {showInfo && (
         <div className="mt-2 z-10">

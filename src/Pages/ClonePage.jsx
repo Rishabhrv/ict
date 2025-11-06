@@ -65,7 +65,7 @@ const ClonePage = () => {
 
   // ✅ Button click handler
   const goToChatApp = () => {
-    const redirectUrl = `http://localhost:3000/chat?token=${token}`;
+    const redirectUrl = `http://localhost:3000/?token=${token}`;
     window.location.href = redirectUrl;
   };
 

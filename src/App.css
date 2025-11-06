@@ -7,34 +7,44 @@
   pointer-events: none;
 }
 
-.height-of-msg{
-  height: 77vh;
-}
-
-.textarea-height{
-  height: 17vh;
-}
 
 .height-userlist{
   height: 76vh;
 }
 
 .text-height{
-  height: 11vh;
+  height: 9vh;
 }
 
-@media (min-width: 1300px) {
-  .height-of-msg {
-    height: 67vh;
-  }
+.shadow-all-sides {
+  box-shadow: 0 0 6px rgba(0,0,0,0.15);
+}
 
-  
+.height-of-msg {
+  height: 88vh;  /* fills most of the viewport */
+      padding-bottom: 1%;
+
+
+}
+
+/* For large desktops (1300px and above) */
+@media (min-width: 1400px) {
+  .height-of-msg {
+    height: 89vh; 
+    padding-bottom: 1%;
+  }
 }
 
 @media (max-width: 1299px) and (min-width: 768px) {
   .height-of-msg {
-    height: 60vh;
+    height: screen;
+    padding-bottom: 1.5%;
   }
+
+  .height-userlist{
+    height: 70vh;
+  }
+
 }
 
 

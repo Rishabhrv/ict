@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
 import CreateGroupSlider from "./CreateGroupSlider";
 
-const AddMemberSlider = ({ isOpen, onClose, token, API_URL, onAddMembers }) => {
+const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [allUsers, setAllUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -12,19 +12,25 @@ const AddMemberSlider = ({ isOpen, onClose, token, API_URL, onAddMembers }) => {
 
   // 🔹 Fetch all users on open
   useEffect(() => {
-    if (isOpen) {
-      fetch(`${API_URL}/all_users`, {
-        headers: { Authorization: `Bearer ${token}` },
+  if (isOpen) {
+    fetch(`${API_URL}/all_users`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const users = Array.isArray(data) ? data : [];
+
+        // ✅ Filter out logged-in user
+        const filtered = users.filter((u) => u.id !== user?.id);
+
+        setAllUsers(filtered);
+        setFilteredUsers(filtered);
       })
-        .then((r) => r.json())
-        .then((data) => {
-          const users = Array.isArray(data) ? data : [];
-          setAllUsers(users);
-          setFilteredUsers(users);
-        })
-        .catch((err) => console.error("Error fetching users:", err));
-    }
-  }, [isOpen, API_URL, token]);
+      .catch((err) => console.error("Error fetching users:", err));
+  }
+}, [isOpen, API_URL, token, user?.id]);
+
+
 
   // 🔹 Filter users
   useEffect(() => {
