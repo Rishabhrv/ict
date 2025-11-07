@@ -15,43 +15,49 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   // const [isSliderOpen, setIsSliderOpen] = useState(false);
 
 
+
+
   // 🔹 Fetch existing conversations
-  useEffect(() => {
-  const fetchChats = async () => {
-    try {
-      const [convoRes, groupRes] = await Promise.all([
-        fetch(`${API_URL}/conversations`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_URL}/groups`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+const fetchChats = React.useCallback(async () => {
+  try {
+    const [convoRes, groupRes] = await Promise.all([
+      fetch(`${API_URL}/conversations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`${API_URL}/groups`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
 
-      const convoData = await convoRes.json();
-      const groupData = await groupRes.json();
+    const convoData = await convoRes.json();
+    const groupData = await groupRes.json();
 
-      const userChats = Array.isArray(convoData)
-        ? convoData.map((c) => ({ ...c, type: "user", hasConversation: true }))
-        : [];
+    const userChats = Array.isArray(convoData)
+      ? convoData.map((c) => ({ ...c, type: "user", hasConversation: true }))
+      : [];
 
-      const groups = Array.isArray(groupData)
-        ? groupData.map((g) => ({ ...g, type: "group", hasConversation: true }))
-        : [];
+    const groups = Array.isArray(groupData)
+      ? groupData.map((g) => ({ ...g, type: "group", hasConversation: true }))
+      : [];
 
-      // ✅ Merge & sort by latest message time
-      const merged = [...userChats, ...groups].sort(
-        (a, b) => new Date(b.last_time || 0) - new Date(a.last_time || 0)
-      );
+    const merged = [...userChats, ...groups].sort(
+      (a, b) => new Date(b.last_time || 0) - new Date(a.last_time || 0)
+    );
 
-      setConvos(merged);
-    } catch (err) {
-      console.error("Error fetching chats:", err);
-    }
-  };
+    setConvos(merged);
+  } catch (err) {
+    console.error("Error fetching chats:", err);
+  }
+}, [token]);
 
+
+
+useEffect(() => {
   fetchChats();
-}, [token, lastMessageUpdate]);
+}, [fetchChats, lastMessageUpdate]);
+
+
+
 
 
   // 🔹 Handle search
@@ -249,15 +255,28 @@ const timeAgo = (dateString) => {
             return (
               <button
                 key={c.id || c.user_id}
-                onClick={() => {
-    setActiveChat(c.id || c.user_id);
+                onClick={async () => {
+                  setActiveChat(c.id || c.user_id);
+                
+                  // ✅ Instantly reset unread for this chat in UI
+                  setConvos((prev) =>
+                    prev.map((chat) =>
+                      chat.id === c.id || chat.user_id === c.user_id
+                        ? { ...chat, unread: 0 }
+                        : chat
+                    )
+                  );
+                
+                  if (c.type === "group") {
+                    onSelectConversation({ ...c, isGroup: true });
+                  } else {
+                    onSelectConversation(c);
+                  }
+                
+                  // ✅ Now refresh all chats so others updates their unread count
+                  await fetchChats();
+                }}
 
-    if (c.type === "group") {
-      onSelectConversation({ ...c, isGroup: true });
-    } else {
-      onSelectConversation(c);
-    }
-  }}
                 className={`w-full p-4 flex items-start space-x-3 hover:bg-red-50 transition-colors cursor-pointer ${
                   isActive ? "bg-red-50" : ""
                 }`}
@@ -287,7 +306,19 @@ const timeAgo = (dateString) => {
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-semibold text-gray-900 truncate text-[16px]">{name}</h3>
+                    <div className="flex">
+                      {
+                      c.unread > 0 && (
+                    <div className="flex-shrink-0 absolute ml-5 mt-5 w-5 h-5 bgcolor-500 rounded-full flex items-center justify-center text-xs text-white font-semibold">
+                      {c.unread}
+                    </div>
+                  )
+                    }
                     <span className="text-xs text-gray-500 ml-2">{timeAgo(c.last_time)}</span>
+
+
+                    </div>
+                    
                   </div>
 
                   <p className="text-xs text-gray-600 truncate flex items-center gap-1">
@@ -330,11 +361,7 @@ const timeAgo = (dateString) => {
                     Connect <FontAwesomeIcon icon={faPlus} />
                   </div>
                 ) : (
-                  c.unread > 0 && (
-                    <div className="flex-shrink-0 w-5 h-5 bgcolor-500 rounded-full flex items-center justify-center text-xs text-white font-semibold">
-                      {c.unread}
-                    </div>
-                  )
+                  ""
                 )}
               </button>
             );

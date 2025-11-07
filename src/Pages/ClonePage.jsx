@@ -3,6 +3,10 @@ import React, { useState, useEffect } from "react";
 const ClonePage = () => {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState(null);
+  // const [sessionId, setSessionId] = useState(null);
+  // const [clickId, setClickId] = useState(null);
+  // ✅ Generate UUID
+  const generateUUID = () => crypto.randomUUID();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -17,13 +21,23 @@ const ClonePage = () => {
       setToken(activeToken);
     }
 
-    // ✅ If no token found → redirect to login
+    // ✅ Redirect if no token
     if (!activeToken) {
       window.location.href = "http://localhost:5001/login";
       return;
     }
 
-    // ✅ Validate token and get user details
+    // ✅ Create or reuse session_id
+    // let storedSession = localStorage.getItem("session_id");
+    // if (!storedSession) {
+    //   storedSession = generateUUID();
+    //   localStorage.setItem("session_id", storedSession);
+    // }
+    // setSessionId(storedSession);
+
+    
+
+    // ✅ Validate token
     fetch("http://localhost:5001/auth/validate_and_details", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -37,21 +51,34 @@ const ClonePage = () => {
             ...data.user_details,
           });
         } else {
-          console.warn("Token invalid:", data.error);
           localStorage.removeItem("token");
           window.location.href = "http://localhost:5001/login";
         }
       })
-      .catch((err) => {
-        console.error("Failed to fetch user details:", err);
+      .catch(() => {
         localStorage.removeItem("token");
         window.location.href = "http://localhost:5001/login";
       });
   }, []);
 
-  useEffect(() => {
-    console.log("🧍‍♂️ Current logged-in user:", user);
-  }, [user]);
+  // ✅ Button click handler with click_id generation
+  const goToChatApp = () => {
+
+    // let storedclick = localStorage.getItem("click_id");
+    // if (!storedclick) {
+    //   storedclick = generateUUID();
+    //   localStorage.setItem("click_id", storedclick);
+    // }
+    // setClickId(storedclick);
+
+    let clickId = generateUUID();
+    let sessionId = generateUUID();
+
+    
+
+    const redirectUrl = `http://localhost:3000/?token=${token}&session_id=${sessionId}&click_id=${clickId}`;
+    window.location.href = redirectUrl;
+  };
 
   if (!token || !user) {
     return (
@@ -63,19 +90,13 @@ const ClonePage = () => {
     );
   }
 
-  // ✅ Button click handler
-  const goToChatApp = () => {
-    const redirectUrl = `http://localhost:3000/?token=${token}`;
-    window.location.href = redirectUrl;
-  };
-
   return (
     <div className="flex items-center justify-center h-screen">
       <button
         onClick={goToChatApp}
         className="bg-blue-600 text-white px-6 py-3 rounded-lg shadow-md hover:bg-blue-700 transition"
       >
-       ChatApp
+        ChatApp
       </button>
     </div>
   );

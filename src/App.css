@@ -21,29 +21,50 @@
 }
 
 .height-of-msg {
-  height: 88vh;  /* fills most of the viewport */
-      padding-bottom: 1%;
+  height: 79vh !important;  /* fills most of the viewport */
+  padding-bottom: 1%;
+  min-height: 400px
 
 
 }
 
+.sendmsg{
+  width: 70%;
+
+}
+
+
+
 /* For large desktops (1300px and above) */
 @media (min-width: 1400px) {
   .height-of-msg {
-    height: 89vh; 
+    min-height: 89vh !important; 
     padding-bottom: 1%;
+    min-height: 400px
+  }
+
+  .sendmsg{
+    width: 72%;
   }
 }
 
 @media (max-width: 1299px) and (min-width: 768px) {
   .height-of-msg {
-    height: screen;
+    height: 85vh !important;
     padding-bottom: 1.5%;
+    min-height: 400px
   }
 
   .height-userlist{
     height: 70vh;
   }
+
+   .sendmsg{
+  width: 67%;
+
+}
+
+
 
 }
 

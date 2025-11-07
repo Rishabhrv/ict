@@ -9,6 +9,8 @@ import { faArrowRightFromBracket } from "@fortawesome/free-solid-svg-icons";
 
 const FLASK_AUTH_URL = process.env.REACT_APP_FLASK_AUTH_URL;
 const FLASK_LOGIN_URL = process.env.REACT_APP_FLASK_LOGIN_URL;
+const API_URL = process.env.REACT_APP_API_URL;
+
 
 // ✅ Allowed roles and apps
 const VALID_ROLES = ["admin", "user"];
@@ -54,6 +56,9 @@ const HomePage = () => {
   const [lastMessageUpdate, setLastMessageUpdate] = useState(null);
   const [isValidating, setIsValidating] = useState(true);
   const [popupMsg, setPopupMsg] = useState(""); // ✅ popup message state
+  const [ , setSessionId] = useState(null);
+  const [ , setClickId] = useState(null);
+  
 
   // ✅ Custom popup function
   const showPopup = (message) => {
@@ -192,39 +197,55 @@ const checkTokenExpiry = (token) => {
     }
   };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get("token");
-    const storedToken = localStorage.getItem("token");
-    const activeToken = urlToken || storedToken;
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get("token");
+  const storedToken = localStorage.getItem("token");
+  const urlSessionId = params.get("session_id");
+  const storedSession = localStorage.getItem("session_id");
+  const urlclickId = params.get("click_id");
+  const storedclick = localStorage.getItem("click_id");
 
-    // ✅ No token found
-    if (!activeToken) {
-      redirectToLogin("Access denied: No token provided.");
-      return;
-    }
 
-    // ✅ Update token in state and localStorage if from URL
-    if (urlToken) {
-      localStorage.setItem("token", urlToken);
-      setToken(urlToken);
-      
-      // Clean URL by removing token parameter
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, newUrl);
-    } else {
-      setToken(storedToken);
-    }
+  fetch(`${API_URL}/log_navigation`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${storedToken}`
+    },
+    body: JSON.stringify({
+      click_id: storedclick,
+      page: "AGPH Connect",
+      session_id: storedSession
+    })
+  });
 
-    // ✅ Check token expiry first
-    if (checkTokenExpiry(activeToken)) {
-      return;
-    }
+  if (!storedToken) {
+    redirectToLogin("Access denied: No token provided.");
+    return;
+  }
 
-    // ✅ Validate the token
-    validateToken(activeToken);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  if (urlToken) {
+    localStorage.setItem("token", urlToken);
+    setToken(urlToken);
+    localStorage.setItem("session_id", urlSessionId);
+    setSessionId(urlSessionId);
+    localStorage.setItem("click_id", urlclickId);
+    setClickId(urlclickId);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else {
+    setToken(storedToken);
+  }
+
+  if (!checkTokenExpiry(storedToken)) {
+    validateToken(storedToken);
+  }
+
+  // ✅ Tell React we intentionally ignore dependencies
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+
 
   // ✅ Loading state
   if (isValidating) {
