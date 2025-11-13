@@ -26,13 +26,15 @@ const fetchChats = React.useCallback(async () => {
 
       const convoData = await convoRes.json();
       const groupData = await groupRes.json();
-
-
-      const userChats = convoData.map((c) => ({ ...c, type: "user", hasConversation: true }));
-      const groups = groupData.map((g) => ({ ...g, type: "group", hasConversation: true }));
-
       
-
+      // 🔥 SAFE: If backend returns error or null, convert to empty array
+      const safeConvos = Array.isArray(convoData) ? convoData : [];
+      const safeGroups = Array.isArray(groupData) ? groupData : [];
+      
+      // 🔥 Now .map will NEVER crash
+      const userChats = safeConvos.map(c => ({ ...c, type: "user", hasConversation: true }));
+      const groups = safeGroups.map(g => ({ ...g, type: "group", hasConversation: true }));
+      
       setConvos([...userChats, ...groups].sort((a, b) => new Date(b.last_time) - new Date(a.last_time)));
     } catch (err) {
       console.error("Error fetching chats:", err);
