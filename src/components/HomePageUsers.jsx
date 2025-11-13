@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFile, faImage, faPlus,faUserGroup } from "@fortawesome/free-solid-svg-icons";
 import {  Search, MessagesSquare, X   } from "lucide-react";
@@ -12,55 +12,40 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const [loading, setLoading] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
+  const socketRef = useRef(null);
   // const [isSliderOpen, setIsSliderOpen] = useState(false);
 
 
 
-
-  // 🔹 Fetch existing conversations
 const fetchChats = React.useCallback(async () => {
-  try {
-    const [convoRes, groupRes] = await Promise.all([
-      fetch(`${API_URL}/conversations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      fetch(`${API_URL}/groups`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    ]);
+    try {
+      const [convoRes, groupRes] = await Promise.all([
+        fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/groups`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
 
-    const convoData = await convoRes.json();
-    const groupData = await groupRes.json();
+      const convoData = await convoRes.json();
+      const groupData = await groupRes.json();
 
-    const userChats = Array.isArray(convoData)
-      ? convoData.map((c) => ({ ...c, type: "user", hasConversation: true }))
-      : [];
 
-    const groups = Array.isArray(groupData)
-      ? groupData.map((g) => ({ ...g, type: "group", hasConversation: true }))
-      : [];
+      const userChats = convoData.map((c) => ({ ...c, type: "user", hasConversation: true }));
+      const groups = groupData.map((g) => ({ ...g, type: "group", hasConversation: true }));
 
-    const merged = [...userChats, ...groups].sort(
-      (a, b) => new Date(b.last_time || 0) - new Date(a.last_time || 0)
-    );
+      
 
-    setConvos(merged);
-  } catch (err) {
-    console.error("Error fetching chats:", err);
-  }
-}, [token]);
+      setConvos([...userChats, ...groups].sort((a, b) => new Date(b.last_time) - new Date(a.last_time)));
+    } catch (err) {
+      console.error("Error fetching chats:", err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    fetchChats();
+  }, [fetchChats, lastMessageUpdate]);
 
 
 
-useEffect(() => {
-  fetchChats();
-}, [fetchChats, lastMessageUpdate]);
-
-
-
-
-
-  // 🔹 Handle search
+  // ✅ 2. Search Users + Groups
   useEffect(() => {
     if (!searchTerm.trim()) {
       setSearchResults([]);
@@ -68,26 +53,74 @@ useEffect(() => {
     }
 
     setLoading(true);
-    const timer = setTimeout(() => {
-      fetch(`${API_URL}/users?search=${encodeURIComponent(searchTerm)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          const userList = Array.isArray(data) ? data : [];
-          const existingUsernames = new Set(convos.map((c) => c.other_username));
-          const results = userList.map((u) => ({
-            ...u,
-            hasConversation: existingUsernames.has(u.username),
-          }));
-          setSearchResults(results);
-        })
-        .catch((err) => console.error("Search error:", err))
-        .finally(() => setLoading(false));
+    const timer = setTimeout(async () => {
+      try {
+        const [userRes, groupRes] = await Promise.all([
+          fetch(`${API_URL}/users?search=${encodeURIComponent(searchTerm)}`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/groups?search=${encodeURIComponent(searchTerm)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        const users = await userRes.json();
+        const groups = await groupRes.json();
+
+        setSearchResults([
+          ...groups.map(g => ({ ...g, type: "group" })),
+          ...users.map(u => ({ ...u, type: "user" })),
+        ]);
+      } catch (err) {
+        console.error("Search error:", err);
+      }
+      setLoading(false);
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, convos, token]);
+  }, [searchTerm, token]);
+
+        const getTimeValue = (t) => {
+        if (!t) return 0;      
+
+        // If group format "2025-11-12 12:49:31"
+        if (t.includes(" ")) {
+          return new Date(t.replace(" ", "T") + "-05:30").getTime();
+        }      
+
+        // Normal ISO format (user chat)
+        return new Date(t).getTime();
+      };
+
+
+
+
+  // ✅ 3. Listen for new group messages (must be at top level too)
+  useEffect(() => {
+    const s = socketRef.current;
+    if (!s) return;
+
+    s.on("receive_group_message", (msg) => {
+      setConvos(prev => {
+        const updated = prev.map(chat =>
+          chat.id === msg.group_id && chat.type === "group"
+            ? {
+                ...chat,
+                last_message: msg.message,
+                last_message_type: msg.message_type,
+                last_time: new Date().toISOString(),
+                unread: (chat.unread || 0) + 1
+              }
+            : chat
+        );
+
+        const groupChat = updated.find(c => c.id === msg.group_id && c.type === "group");
+        const others = updated.filter(c => !(c.id === msg.group_id && c.type === "group"));
+        return groupChat
+          ? [groupChat, ...others].sort((a, b) => getTimeValue(b.last_time) - getTimeValue(a.last_time))
+          : updated;
+      });
+    });
+
+    return () => s.off("receive_group_message");
+  }, []);
+
 
   const listToShow = showAllUsers
   ? searchResults
@@ -150,6 +183,28 @@ const timeAgo = (dateString) => {
     month: "short",
   });
 };
+
+// ✅ For Group (IST format "2025-11-12 12:49:31")
+const timeAgoGroup = (dateString) => {
+  if (!dateString) return "";
+
+  // Convert "2025-11-12 12:49:31" → valid IST Date
+  const messageTime = new Date(dateString.replace(" ", "T") + "+05:30");
+
+  const now = new Date();
+  const diffMs = now - messageTime;
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+
+  return messageTime.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+};
+
 
 
 
@@ -284,18 +339,18 @@ const timeAgo = (dateString) => {
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
                   <div
-  className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg font-semibold ${
-    c.type === "group"
-      ? "bg-gray-100 text-gray-600"
-      : "bg-gradient-to-br from-[#ff8181ff] to-[#ff5f5fff] text-white"
-  }`}
->
-  {c.group_image ? (
-    <FontAwesomeIcon icon={faUserGroup} />
-  ) : (
-    avatarLetter
-  )}
-</div>
+                    className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg font-semibold ${
+                      c.type === "group"
+                        ? "bg-gray-100 text-gray-600"
+                        : "bg-gradient-to-br from-[#ff8181ff] to-[#ff5f5fff] text-white"
+                    }`}
+                  >
+                    {c.group_image ? (
+                      <FontAwesomeIcon icon={faUserGroup} />
+                    ) : (
+                      avatarLetter
+                    )}
+                  </div>
 
                   {c.status === "online" && (
                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
@@ -309,60 +364,98 @@ const timeAgo = (dateString) => {
                     <div className="flex">
                       {
                       c.unread > 0 && (
-                    <div className="flex-shrink-0 absolute ml-5 mt-5 w-5 h-5 bgcolor-500 rounded-full flex items-center justify-center text-xs text-white font-semibold">
+                    <div className="flex-shrink-0  w-5 h-5 bgcolor-500 rounded-full flex items-center justify-center text-xs text-white font-semibold">
                       {c.unread}
                     </div>
                   )
                     }
-                    <span className="text-xs text-gray-500 ml-2">{timeAgo(c.last_time)}</span>
 
+                    <span className="text-xs text-gray-500 ml-2">
+                      {c.type === "group" ? timeAgoGroup(c.last_time) : timeAgo(c.last_time)}
+                    </span>
 
                     </div>
                     
                   </div>
 
                   <p className="text-xs text-gray-600 truncate flex items-center gap-1">
-                    {(() => {
-                      if (!c.last_message) return c.email || "No messages yet";
-                      if (c.last_message_type === "text") return c.last_message;
-                      if (c.last_message_type === "file") {
-                        const fileName = c.last_message.split("/").pop();
-                        return (
-                          <>
-                            <FontAwesomeIcon icon={faFile} className="text-gray-400" />
-                            <span className="truncate max-w-[80%]">{fileName}</span>
-                          </>
-                        );
-                      }
-                      if (c.last_message_type === "image") {
-                        const fileName = c.last_message.split("/").pop();
-                        return (
-                          <>
-                            <FontAwesomeIcon icon={faImage} className="text-gray-400" />
-                            <span className="truncate max-w-[150px]">{fileName}</span>
-                          </>
-                        );
-                      }
-                      return c.last_message;
-                    })()}
-                  </p>
+  {(() => {
+    if (c.type === "group") {
+      const sender = c.last_sender === user.username ? "You" : c.last_sender;
+      
+      if (!c.last_message) return `${sender}: No messages yet`;
+
+      if (c.last_message_type === "text") return `${sender}: ${c.last_message}`;
+
+      if (c.last_message_type === "file") {
+        const fileName = c.last_message.split("/").pop();
+        return (
+          <>
+            <span>{sender}:</span>
+            <FontAwesomeIcon icon={faFile} className="text-gray-400" />
+            <span className="truncate max-w-[120px]">{fileName}</span>
+          </>
+        );
+      }
+
+      if (c.last_message_type === "image") {
+        const fileName = c.last_message.split("/").pop();
+        return (
+          <>
+            <span>{sender}:</span>
+            <FontAwesomeIcon icon={faImage} className="text-gray-400" />
+            <span className="truncate max-w-[120px]">{fileName}</span>
+          </>
+        );
+      }
+
+      return `${sender}: ${c.last_message}`;
+    }
+
+    // ✅ normal user chat below
+    if (!c.last_message) return c.email || "No messages yet";
+    if (c.last_message_type === "text") return c.last_message;
+
+    if (c.last_message_type === "file") {
+      const fileName = c.last_message.split("/").pop();
+      return (
+        <>
+          <FontAwesomeIcon icon={faFile} className="text-gray-400" />
+          <span className="truncate max-w-[80%]">{fileName}</span>
+        </>
+      );
+    }
+
+    if (c.last_message_type === "image") {
+      const fileName = c.last_message.split("/").pop();
+      return (
+        <>
+          <FontAwesomeIcon icon={faImage} className="text-gray-400" />
+          <span className="truncate max-w-[150px]">{fileName}</span>
+        </>
+      );
+    }
+
+    return c.last_message;
+  })()}
+</p>
+
                 </div>
 
                 {/* Unread or New chat */}
-                {!c.hasConversation ? (
+                {!c.hasConversation && c.type !== "group" && (
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
                       createConversation(c.id);
                     }}
-                    className="bg-white text-red-400 border text-[10px] cursor-pointer hover:bg-red-300 hover:text-white  rounded-lg p-1 py-[2px] my-auto"
+                    className="bg-white text-red-400 border text-[10px] cursor-pointer hover:bg-red-300 hover:text-white rounded-lg p-1 py-[2px] my-auto"
                     title="Start Conversation"
                   >
                     Connect <FontAwesomeIcon icon={faPlus} />
                   </div>
-                ) : (
-                  ""
                 )}
+
               </button>
             );
           })

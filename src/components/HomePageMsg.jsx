@@ -22,13 +22,15 @@ import {
   Smile,
   Send,
   CheckCheck,
+  ArrowDown,
 } from "lucide-react";
 import { createSocket, getSocket } from "../socket";
 import ChatUserInfo from "./ChatUserInfo";
 import EmojiPicker from "emoji-picker-react";
 import BackImage from "../components/Images/1211.jpg";
 import ShareMessageModal from "./ShareMessageModal";
-
+// import useFCM from "../hooks/useFCM";
+import ImageIcon from "../components/Images/1f4ac.png"
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -55,6 +57,17 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   });
   const messageRefs = useRef({});
   const [pendingFiles, setPendingFiles] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+
+  // const authToken = token;
+  // const userId = user.id;
+
+  // useFCM({ token: authToken, userId });
+
 
 
 const sendShareMessage = async () => {
@@ -150,7 +163,7 @@ const showErrorPopup = (message) => {
   setTimeout(() => setShowPopup(false), 4000); // auto close after 4 sec
 };
 
-   // ✅ Initialize socket
+  // ✅ Initialize socket
   useEffect(() => {
     if (!token) return;
     const s = createSocket(token);
@@ -162,6 +175,28 @@ const showErrorPopup = (message) => {
 
     // ✅ Handle new messages safely
     s.on("new_message", (msg) => {
+
+
+      // Ignore notification if message belongs to currently open chat AND user sent it
+  if (conversation && msg.conversation_id === conversation.id && msg.sender_id !== user.id) {
+    
+    // Show notification only if browser tab is in background
+    if (document.hidden && Notification.permission === "granted") {
+
+      let bodyText = "";
+
+      if (msg.message_type === "text") bodyText = msg.message;
+      if (msg.message_type === "image") bodyText = "📷 Image";
+      if (msg.message_type === "file") bodyText = "📎 File";
+
+      new Notification(msg.sender_name || "New message", {
+        body: bodyText,
+        icon: ImageIcon // your favicon/logo
+      });
+
+    }
+  }
+
       if (conversation && msg.conversation_id === conversation.id) {
         setMessages((prev) => {
           const exists = prev.some((m) => {
@@ -195,7 +230,7 @@ const showErrorPopup = (message) => {
     return () => {
       if (s) s.off("new_message");
     };
-  }, [token, conversation, onNewMessage]);
+  }, [token, conversation, onNewMessage, user.id]);
 
 
 const handleFileChange = (e) => {
@@ -214,6 +249,31 @@ const handleFileChange = (e) => {
   }
   setPendingFiles((prev) => [...prev, ...files]); // ✅ Save files to preview them
 };
+
+const handleDragOver = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setDragActive(true);
+};
+
+const handleDragLeave = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setDragActive(false);
+};
+
+const handleDrop = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setDragActive(false);
+
+  const files = Array.from(e.dataTransfer.files);
+  if (!files.length) return;
+
+  const validFiles = files.filter((file) => file instanceof File);
+  setPendingFiles((prev) => [...prev, ...validFiles]); // ✅ same structure as your file picker & paste
+};
+
 
 
 
@@ -241,45 +301,124 @@ const scrollToMessage = (msgId) => {
   };
 
   // ✅ Fetch messages when conversation changes
-  useEffect(() => {
-    if (!conversation) {
-      setMessages([]);
-      return;
-    }
+  // ✅ Fetch latest 100 messages on conversation change
+useEffect(() => {
+  if (!conversation) {
+    setMessages([]);
+    return;
+  }
 
-    fetch(`${API_URL}/messages/${conversation.id}`, {
-  headers: { Authorization: `Bearer ${token}` },
-})
-  .then((r) => r.json())
-  .then((data) => {
-    setMessages(data);
+  setOffset(0);
+  setHasMore(true);
 
-    // 🧩 Preload reactions into state for instant display
-    const reactionsMap = {};
-    data.forEach((msg) => {
-      if (msg.reactions && Array.isArray(msg.reactions)) {
-        reactionsMap[msg.id] = msg.reactions.map((r) => r.emoji);
-      }
-    });
-    setReactions(reactionsMap);
+  fetch(`${API_URL}/messages/${conversation.id}?limit=100&offset=0`, {
+    headers: { Authorization: `Bearer ${token}` },
   })
-  .catch((err) => console.error(err));
+    .then((r) => r.json())
+    .then((data) => {
+      setMessages(data);
 
+      // Preload reactions
+      const reactionsMap = {};
+      data.forEach((msg) => {
+        if (msg.reactions && Array.isArray(msg.reactions)) {
+          reactionsMap[msg.id] = msg.reactions.map((r) => r.emoji);
+        }
+      });
+      setReactions(reactionsMap);
+    })
+    .catch(console.error);
 
-    const s = getSocket();
-    if (s && conversation) s.emit("join", { token, conversation_id: conversation.id });
+  const s = getSocket();
+  if (s) s.emit("join", { token, conversation_id: conversation.id });
 
-    return () => {
-      if (s && conversation) s.emit("leave", { conversation_id: conversation.id });
-    };
-  }, [conversation, token]);
+  return () => {
+    if (s) s.emit("leave", { conversation_id: conversation.id });
+  };
+}, [conversation, token]);
+
 
   // ✅ Auto-scroll when new messages arrive
-  useEffect(() => {
-    if (messagesRef.current) {
+useEffect(() => {
+  if (messagesRef.current && offset === 0) {
+    setTimeout(() => {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    }, 20);
+  }
+}, [messages, offset]);
+
+  const scrollToBottom = () => {
+    messagesRef.current.scrollTo({
+      top: messagesRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  };
+
+
+useEffect(() => {
+  const handlePaste = (event) => {
+    if (!event.clipboardData) return;
+
+    const items = event.clipboardData.items;
+    for (let item of items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          handlePastedFile(file);
+        }
+      }
     }
-  }, [messages]);
+  };
+
+  window.addEventListener("paste", handlePaste);
+  return () => window.removeEventListener("paste", handlePaste);
+}, []);
+
+
+const handlePastedFile = (file) => {
+  if (!(file instanceof Blob || file instanceof File)) {
+    console.error("Not a valid file:", file);
+    return;
+  }
+
+  setPendingFiles((prev) => [...prev, file]); // ✅ Store only File object
+};
+
+
+
+  const loadOlderMessages = async () => {
+  if (!conversation || !hasMore || loadingMore) return;
+  setLoadingMore(true);
+
+  const currentScrollHeight = messagesRef.current.scrollHeight;
+  const currentScrollTop = messagesRef.current.scrollTop;
+
+  const newOffset = offset + 100;
+
+  try {
+    const res = await fetch(
+      `${API_URL}/messages/${conversation.id}?limit=100&offset=${newOffset}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    const older = await res.json();
+
+    if (older.length < 100) setHasMore(false);
+
+    setMessages((prev) => [...older, ...prev]);
+    setOffset(newOffset);
+
+    setTimeout(() => {
+      messagesRef.current.scrollTop =
+        messagesRef.current.scrollHeight - currentScrollHeight + currentScrollTop;
+    }, 10);
+  } catch (err) {
+    console.error(err);
+  }
+
+  setLoadingMore(false);
+};
+
 
 
   // ✅ Send message
@@ -368,12 +507,19 @@ useEffect(() => {
     // Update message reactions
     setReactions((prev) => ({
       ...prev,
-      [data.message_id]: data.reactions || [],
+      [data.message_id]: (data.reactions || []).map(r => r.emoji)
     }));
   });
 
   return () => s.off("reaction_update");
 }, [token]);
+
+
+useEffect(() => {
+  if (Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+}, []);
 
 
     // ✅ If no conversation selected, show empty state
@@ -399,7 +545,10 @@ useEffect(() => {
         backgroundPosition: "top left",   // ✅ Start from top-left
         width: "100%",
       }}
-      className="w-full">
+        className=" w-full"
+  onDragOver={handleDragOver}
+  onDragLeave={handleDragLeave}
+  onDrop={handleDrop}>
         {/* Header */}
         <div className="flex border-b border-gray-200 py-4 px-6 justify-between bg-white">
           <div className="flex">
@@ -431,11 +580,50 @@ useEffect(() => {
           </div>
         </div>
 
+        {dragActive && (
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white p-60 px-80 rounded-xl shadow-lg text-center cursor-pointer">
+              <p className="text-lg font-semibold text-gray-700">Drop files here</p>
+              <p className="text-sm text-gray-500">Images, Docs, Videos, etc.</p>
+            </div>
+          </div>
+        )}
+
       {/* Messages */}
         <div
-          className="pt-4 overflow-y-auto p-4 px-4 hide-scrollbar height-of-msg pb-1"
+          className="pt-4 overflow-y-auto p-4 px-8 hide-scrollbar height-of-msg pb-1"
           ref={messagesRef}
+
+            onScroll={() => {
+              const div = messagesRef.current;
+              if (!div) return;
+          
+              // ✅ 1. Show "Load older messages" button when scrolled to TOP
+              if (div.scrollTop === 0 && hasMore) {
+                document.getElementById("loadMoreBtn")?.classList.remove("hidden");
+              }
+          
+              // ✅ 2. Show scroll-to-bottom button when user is 150px above bottom
+              if (div.scrollHeight - div.scrollTop - div.clientHeight > 150) {
+                setShowScrollBottom(true);
+              } else {
+                setShowScrollBottom(false);
+              }
+            }}
         >
+
+            {hasMore && (
+              <div className="flex justify-center my-2">
+                <button
+                  id="loadMoreBtn"
+                  className="hidden bg-gray-200 text-sm px-4 py-1 rounded-full text-gray-700 hover:bg-gray-300 transition"
+                  onClick={loadOlderMessages}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "Loading..." : "Load older messages"}
+                </button>
+              </div>
+            )}
           {showPopup && (
             <div className="fixed top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300">
               {popupMsg}
@@ -494,8 +682,10 @@ useEffect(() => {
                     className={`flex ${mine ? "justify-end" : "justify-start"} mb-2 group relative`}
                   >
                   <div>
+                  
                     <div className="flex">
                       <div>
+
                         <div
                           className={`w-fit max-w-xs px-[5px] py-[4px] rounded-xl  ${
                             mine
@@ -513,7 +703,7 @@ useEffect(() => {
                             >
                               {/* 🧍 Username */}
                               <p className="truncate font-semibold">
-                                {msg.reply_to_user || "User"}
+                                {msg.reply_to_user || "Message Deleted"}
                               </p>
 
                             {/* 🧠 Auto-detect message type */}
@@ -534,7 +724,7 @@ useEffect(() => {
                                     <img
                                       src={replyText}
                                       alt="reply-img"
-                                      className="w-[100%] h-8 rounded"
+                                      className="w-[100%] h-20 rounded"
                                     />     
                                   </div>
                                   );
@@ -842,6 +1032,15 @@ useEffect(() => {
       ));
     })()}
 
+    {showScrollBottom && (
+      <button
+        onClick={scrollToBottom}
+        className="absolute bottom-20 right-6 bg-white text-white p-3  rounded-full shadow-xl hover:scale-110 transition"
+      >
+        <ArrowDown className="text-red-300 hover:text-gray-400" />
+      </button>
+    )}
+
     {/* 📜 Message Info Modal */}
     {selectedMsgInfo && (
       <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
@@ -901,7 +1100,7 @@ useEffect(() => {
       <div className="flex justify-center">
 
   
-          <div className="absolute sendmsg m-3 bottom-0 z-10 ">
+          <div className={`absolute sendmsg m-3 bottom-0 z-10 ${showInfo ? "shrink" : ""}`}>
 
             {/* ✅ Show selected files preview before sending */}
             {pendingFiles.length > 0 && (
@@ -931,7 +1130,7 @@ useEffect(() => {
                     {/* REMOVE BUTTON */}
                     <button
                       onClick={() => setPendingFiles(pendingFiles.filter((_, idx) => idx !== i))}
-                      className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 text-xs rounded-full"
+                      className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 text-xs rounded-full cursor-pointer"
                     >
                       ✕
                     </button>
@@ -940,31 +1139,77 @@ useEffect(() => {
               </div>
             )}
 
-            {replyingTo && (
-                  <div className="flex justify-between items-center bg-gray-200 rounded-t-lg p-2 px-3 border-l-4 border-[#f37c7c] mb-1 w-[95%]">
-                    <div className="text-sm text-gray-800 w-[90%]">
-                      <p className="font-semibold text-gray-700">
-                        Replying to{" "}
-                        {replyingTo.sender_id === user.id
-                          ? "yourself"
-                          : replyingTo.sender_name || "User"}
-                      </p>
-                      <p className="truncate text-gray-600 text-xs">
-                        {replyingTo.message_type === "text"
-                          ? replyingTo.message
-                          : replyingTo.message_type === "image"
-                          ? "📷 Image"
-                          : "📎 File"}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setReplyingTo(null)}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      ✖
-                    </button>
-                  </div>
-                )}
+             {replyingTo && (
+              <div className="flex items-center justify-between bg-gray-100 mx-4 mb-1 px-3 py-2 rounded-lg border-l-4 border-[#f37c7c]">
+                <div className="flex flex-col min-w-0">
+            
+                  <span className="text-xs font-semibold text-gray-600">Replying to:</span>
+            
+                  {(() => {
+                    const replyText = replyingTo.message || replyingTo.text || "";
+            
+                    // 🖼️ IMAGE DETECTION
+                    if (
+                      replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
+                      (replyText.startsWith("http") &&
+                        replyText.includes("/uploads/") &&
+                        replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
+                    ) {
+                      return (
+                        <div className="flex items-center gap-2 mt-1">
+                          <img
+                            src={replyText}
+                            alt="reply-img"
+                            className="w-12 h-8 rounded object-cover"
+                          />
+                        </div>
+                      );
+                    }
+            
+                    // 📎 FILE DETECTION
+                    if (
+                      replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
+                      (replyText.startsWith("http") &&
+                        replyText.includes("/uploads/") &&
+                        replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i))
+                    ) {
+                      const fileName = replyText.split("/").pop();
+                      const ext = fileName.split(".").pop().toLowerCase();
+            
+                      let fileIcon = "📎";
+                      if (["pdf"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePdf} />;
+                      else if (["doc", "docx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileWord} />;
+                      else if (["xls", "xlsx", "csv"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileExcel} />;
+                      else if (["ppt", "pptx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePowerpoint} />;
+                      else if (["zip", "rar", "7z"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileZipper} />;
+                      else if (["txt"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFile} />;
+            
+                      return (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[14px] text-gray-700">{fileIcon}</span>
+                          <span className="text-sm text-gray-800 truncate max-w-[200px]">{fileName}</span>
+                        </div>
+                      );
+                    }
+            
+                    // 💬 TEXT fallback
+                    return (
+                      <span className="text-sm text-gray-800 truncate max-w-[250px]">
+                        {replyText.length > 80 ? replyText.slice(0, 80) + "..." : replyText}
+                      </span>
+                    );
+                  })()}
+            
+                </div>
+            
+                <button
+                  onClick={() => setReplyingTo(null)}
+                  className="text-gray-500 hover:text-red-500 text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
                 <div className="flex gap-2 ">
                   <div className=" flex w-full rounded-3xl bg-white pb-0 textarea-height shadow-all-sides py-2 ">
                     <div className="flex justify-between items-center text-gray-600 px-2">
@@ -1005,28 +1250,27 @@ useEffect(() => {
                 </div>
 
                 <textarea
-  ref={textareaRef}
-  style={{ height: "40px" }} // 👈 ensures initial small height
-  className="w-full outline-none text-sm mt-[1.5%] overflow-y-auto"
-  placeholder="Type a message..."
-  value={input}
-  onChange={(e) => setInput(e.target.value)}
-  onInput={(e) => {
-    e.target.style.height = "auto"; // reset height to measure
-    const maxHeight = 150; // pixels
-    e.target.style.height =
-      e.target.scrollHeight > maxHeight
-        ? `${maxHeight}px`
-        : `${e.target.scrollHeight}px`;
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }}
-/>
-
+                  ref={textareaRef}
+                  style={{ height: "40px" }} // 👈 ensures initial small height
+                  className="w-full outline-none text-sm mt-[1.5%] overflow-y-auto"
+                  placeholder="Type a message..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onInput={(e) => {
+                    e.target.style.height = "auto"; // reset height to measure
+                    const maxHeight = 150; // pixels
+                    e.target.style.height =
+                      e.target.scrollHeight > maxHeight
+                        ? `${maxHeight}px`
+                        : `${e.target.scrollHeight}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                />
             </div>
 
             <div className="flex items-center space-x-2">

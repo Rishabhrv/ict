@@ -203,58 +203,52 @@ useEffect(() => {
   const storedToken = localStorage.getItem("token");
   const urlSessionId = params.get("session_id");
   const storedSession = localStorage.getItem("session_id");
-  const urlClickId = params.get("click_id");
-  const storedClick = localStorage.getItem("click_id");
-
-  // Determine active token (URL takes precedence)
+  const urlclickId = params.get("click_id");
+  const storedclick = localStorage.getItem("click_id");
   const activeToken = urlToken || storedToken;
 
-  // No token found
+
+  fetch(`${API_URL}/log_navigation`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${storedToken}`
+    },
+    body: JSON.stringify({
+      click_id: storedclick,
+      page: "AGPH Connect",
+      session_id: storedSession
+    })
+  });
+
   if (!activeToken) {
     redirectToLogin("Access denied: No token provided.");
     return;
   }
 
-  // Update token, session_id, and click_id in state and localStorage if from URL
   if (urlToken) {
     localStorage.setItem("token", urlToken);
     setToken(urlToken);
     localStorage.setItem("session_id", urlSessionId);
     setSessionId(urlSessionId);
-    localStorage.setItem("click_id", urlClickId);
-    setClickId(urlClickId);
-    // Clean URL by removing token parameter
+    localStorage.setItem("click_id", urlclickId);
+    setClickId(urlclickId);
     window.history.replaceState({}, document.title, window.location.pathname);
   } else {
     setToken(storedToken);
-    setSessionId(storedSession);
-    setClickId(storedClick);
   }
 
-  // Check token expiry first
   if (checkTokenExpiry(activeToken)) {
-    return;
-  }
+      return;
+    }
 
-  // Validate the token and log navigation after validation
-  validateToken(activeToken).then(() => {
-    // Only log navigation if token is valid
-    fetch(`${API_URL}/log_navigation`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${activeToken}`,
-      },
-      body: JSON.stringify({
-        click_id: urlClickId || storedClick,
-        page: "AGPH Connect",
-        session_id: urlSessionId || storedSession,
-      }),
-    }).catch((err) => console.error("Navigation logging failed:", err));
-  });
+    // ✅ Validate the token
+    validateToken(activeToken);
 
+  // ✅ Tell React we intentionally ignore dependencies
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
+
 
 
   // ✅ Loading state

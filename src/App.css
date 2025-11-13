@@ -33,12 +33,16 @@
 
 }
 
+.sendmsg.shrink {
+  width: 49% !important;  /* force override without breaking existing media queries */
+}
+
 
 
 /* For large desktops (1300px and above) */
 @media (min-width: 1400px) {
   .height-of-msg {
-    min-height: 89vh !important; 
+    min-height: 80vh !important; 
     padding-bottom: 1%;
     min-height: 400px
   }
@@ -46,11 +50,16 @@
   .sendmsg{
     width: 72%;
   }
+
+  .sendmsg.shrink {
+  width: 50% !important;  /* force override without breaking existing media queries */
+}
+
 }
 
 @media (max-width: 1299px) and (min-width: 768px) {
   .height-of-msg {
-    height: 85vh !important;
+    height: 75vh !important;
     padding-bottom: 1.5%;
     min-height: 400px
   }
@@ -63,6 +72,11 @@
   width: 67%;
 
 }
+
+.sendmsg.shrink {
+  width: 42% !important;  /* force override without breaking existing media queries */
+}
+
 
 
 
