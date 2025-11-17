@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faImages, faFileAlt, faCircleDown, faUserGroup, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { LogOut } from "lucide-react";
+import AlertPopup from "./AlertPopup";
+import ConfirmPopup from "./ConfirmPopup";
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -11,6 +13,9 @@ const GroupChatInfo = ({ token, conversation, user }) => {
   const [activeTab, setActiveTab] = useState("docs");
   const [allUsers, setAllUsers] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -110,8 +115,8 @@ const addMemberToGroup = async (user_id) => {
 
 
 
-const leaveGroup = async () => {
-  if (!window.confirm("Are you sure you want to leave this group?")) return;
+const handleLeave  = async () => {
+  setShowConfirm(false);
 
   try {
     const res = await fetch(`${API_URL}/leave_group`, {
@@ -129,13 +134,16 @@ const leaveGroup = async () => {
     const data = await res.json();
 
     if (data.success) {
-      alert("You have left the group.");
-      window.location.reload(); // or close sidebar
+      setAlertMessage("You have left the group.");
+      setShowAlert(true);
+      setTimeout(() => window.location.reload(), 1200);
     } else {
-      alert("Failed to leave group: " + data.error);
+      setAlertMessage("Failed to leave group: ");
+      setShowAlert(true);
     }
   } catch (err) {
-    console.error("❌ Leave group error:", err);
+    setAlertMessage("❌ Leave group error:");
+    setShowAlert(true);
   }
 };
 
@@ -219,7 +227,7 @@ const leaveGroup = async () => {
                 </p>
                 <button
                   onClick={() => window.open(file.file_url, "_blank")}
-                  className="text-lg text-gray-400 hover:text-gray-600"
+                  className="text-lg text-gray-400 hover:text-gray-600 cursor-pointer"
                 >
                   <FontAwesomeIcon icon={faCircleDown} />
                 </button>
@@ -249,7 +257,7 @@ const leaveGroup = async () => {
       key={i}
       className="flex items-center justify-between px-2 py-2 hover:bg-gray-100 rounded-md transition"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 cursor-pointer">
         {/* Avatar */}
         <div className="w-9 h-9 bg-[#f46c6c] text-white font-semibold rounded-full flex items-center justify-center text-sm">
           {m.username?.charAt(0).toUpperCase()}
@@ -326,15 +334,28 @@ const leaveGroup = async () => {
 
 <div className="text-left w-full hover:bg-red-100 py-2 rounded-lg">
   <button
-    onClick={leaveGroup}
-    className="flex text-red-500 font-medium  rounded-lg  transition px-3"
+    onClick={() => setShowConfirm(true)}
+    className="flex text-red-500 font-medium  rounded-lg  transition px-3 cursor-pointer"
   >
     <LogOut className="mr-2" />
     Exit Group
   </button>
-
-
 </div>
+
+
+<AlertPopup
+  show={showAlert}
+  message={alertMessage}
+  onClose={() => setShowAlert(false)}
+/>
+
+<ConfirmPopup
+  show={showConfirm}
+  message="Are you sure you want to leave this group?"
+  onConfirm={handleLeave}
+  onCancel={() => setShowConfirm(false)}
+/>
+
 
 
     </div>

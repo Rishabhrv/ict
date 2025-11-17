@@ -18,12 +18,14 @@ import {
   faCircleInfo,
   faEllipsisVertical,
 } from "@fortawesome/free-solid-svg-icons";
-import { Smile, Send, Users } from "lucide-react";
+import { Smile, Send, Users, ArrowDown } from "lucide-react";
 import { createSocket, getSocket } from "../socket";
 import BackImage from "../components/Images/1211.jpg";
 import EmojiPicker from "emoji-picker-react";
 import ShareMessageModal from "./ShareMessageModal";
 import GroupChatInfo from "./GroupChatInfo";
+import ConfirmPopup from "./ConfirmPopup";
+
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -45,6 +47,15 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const [reactionPicker, setReactionPicker] = useState({ show: false, msgId: null });
   const [typingUsers, setTypingUsers] = useState([]); // list of usernames typing
   const [dragActive, setDragActive] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const LIMIT = 100;
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
+  
   
 
   // GROUP id default — keep using a dynamic conversation prop if provided
@@ -56,6 +67,22 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   // message refs for scrolling / reply jump
   const messagesRef = useRef(null);
   const messageRefs = useRef({});
+
+  const menuRef = useRef(null);
+  
+    useEffect(() => {
+      function handleClickOutside(e) {
+        if (menuRef.current && !menuRef.current.contains(e.target)) {
+          setShowMenu(null); // 👈 CLOSE MENU
+        }
+      }
+    
+      document.addEventListener("mousedown", handleClickOutside);
+    
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, []);
 
   // create socket once when token available
   useEffect(() => {
@@ -106,6 +133,13 @@ s.on("new_group_message", (msg) => {
     });
   }
 
+  if (conversation?.isGroup && msg.group_id === conversation.id) {
+    fetch(`${API_URL}/group_seen/${conversation.id}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  }
+
   // ✅ Auto scroll
   setTimeout(() => {
     if (messagesRef.current) {
@@ -122,6 +156,8 @@ s.on("new_group_message", (msg) => {
         [data.message_id]: data.reactions || []
       }));
     });
+
+    
 
     // typing events
     s.on("group_typing", (d) => {
@@ -144,6 +180,42 @@ s.on("new_group_message", (msg) => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, GROUP_ID]);
+
+  const fetchMessageInfo = async (msgId) => {
+  try {
+    const res = await fetch(`${API_URL}/group_message_info/${msgId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json();
+
+    setSelectedMsgInfo({
+      ...selectedMsgInfo,
+      seen: data.seen || [],
+      delivered: data.delivered || [],
+      sender_id: data.sender_id 
+    });
+  } catch (err) {
+    console.error("Error fetching message info:", err);
+  }
+};
+
+
+
+// Mark all existing messages as seen when opening the group
+useEffect(() => {
+  if (!conversation?.isGroup) return;
+  if (!conversation?.id) return;
+
+  fetch(`${API_URL}/group_seen/${conversation.id}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}, [conversation?.id, conversation?.isGroup, token]); 
+
+
+
+
 
  // load initial history (WITH REPLY SUPPORT)
 useEffect(() => {
@@ -193,6 +265,107 @@ useEffect(() => {
     })
     .catch((err) => console.error("❌ Group messages load error:", err));
 }, [token, GROUP_ID]);
+
+useEffect(() => {
+  const box = messagesRef.current;
+  if (!box) return;
+
+  const handler = () => {
+    const atBottom = box.scrollHeight - box.scrollTop <= box.clientHeight + 20;
+    setShowScrollDown(!atBottom);
+  };
+
+  box.addEventListener("scroll", handler);
+  return () => box.removeEventListener("scroll", handler);
+}, []);
+
+const scrollToBottom = () => {
+  if (messagesRef.current) {
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  }
+};
+
+const loadOlderMessages = async () => {
+  if (loadingMore || !hasMore) return;
+
+  setLoadingMore(true);
+  const prevHeight = messagesRef.current.scrollHeight;
+
+  const res = await fetch(
+    `${API_URL}/group_messages/${GROUP_ID}?offset=${offset + LIMIT}&limit=${LIMIT}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+
+  
+
+  let data = await res.json();
+
+  // 🔥 FIX: ensure data is an array
+  const safeData = Array.isArray(data) ? data : [];
+
+   if (safeData.length === 0) {
+    setHasMore(false);
+    setLoadingMore(false);
+    return;
+  }
+
+  if (safeData.length < LIMIT) setHasMore(false);
+
+  // Now safe to map
+  const newMessages = safeData.map((m) => ({
+    id: m.id,
+    sender_id: m.sender_id,
+    sender_name: m.sender_name,
+    message: m.message,
+    message_type: m.message_type,
+    timestamp: m.timestamp,
+    reply_to: m.reply_to,
+    reply_to_message: m.reply_to_message,
+    original_name: m.original_name,
+  }));
+
+ 
+
+  setMessages(prev => [...newMessages, ...prev]);
+  setOffset(prev => prev + LIMIT);
+
+  // Maintain scroll position
+  setTimeout(() => {
+    const newHeight = messagesRef.current.scrollHeight;
+    messagesRef.current.scrollTop = newHeight - prevHeight;
+  }, 10);
+
+  setLoadingMore(false);
+};
+
+useEffect(() => {
+  // ⭐ Reset when switching to a new chat
+  setHasMore(true);
+  setOffset(0);
+  setMessages([]);
+
+  const loadInitialMessages = async () => {
+    const res = await fetch(
+      `${API_URL}/group_messages/${GROUP_ID}?offset=0&limit=${LIMIT}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    let data = await res.json();
+    const safeData = Array.isArray(data) ? data : [];
+
+    setMessages(safeData);
+
+    // Set correct offset
+    setOffset(safeData.length);
+
+    // Hide button if no more messages
+    if (safeData.length < LIMIT) {
+      setHasMore(false);
+    }
+  };
+
+  loadInitialMessages();
+}, [GROUP_ID, token]);
 
 
 
@@ -330,8 +503,7 @@ useEffect(() => {
 
   // delete message (only sender allowed)
   const handleDelete = async (msg) => {
-  if (!isMine(msg)) return alert("You can only delete your own messages");
-  if (!window.confirm("Delete this message?")) return;
+  setShowConfirm(false);
 
   // ✅ Save current scroll position & scroll height before delete
   const mBox = messagesRef.current;
@@ -359,7 +531,7 @@ useEffect(() => {
 
     } else {
       const data = await res.json();
-      alert(data.error || "Failed to delete");
+      console.error(data.error || "Failed to delete");
     }
 
   } catch (err) {
@@ -465,8 +637,9 @@ const getDayLabel = (timestamp) => {
   };
 
   // message info modal show
-  const openInfo = (msg) => {
+  const openInfo = async (msg) => {
     setSelectedMsgInfo(msg);
+    await fetchMessageInfo(msg.id);
     setShowMenu(null);
   };
 
@@ -572,6 +745,16 @@ const getDayLabel = (timestamp) => {
           className="height-of-msg pt-4 overflow-y-auto px-8 hide-scrollbar"
           ref={messagesRef}
         >
+          {hasMore && (
+  <div className="text-center py-2">
+    <button
+      onClick={loadOlderMessages}
+      className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full  text-sm hover:bg-gray-300 cursor-pointer"
+    >
+      {loadingMore ? "Loading..." : "Load older messages"}
+    </button>
+  </div>
+)}
           {messages.map((rawMsg, idx) => {
             // support both shapes: {text,type,mine,id} or backend group shape
             const msg = {
@@ -606,6 +789,7 @@ const getDayLabel = (timestamp) => {
                     </div>
                   </div>
                 )}
+                
 
                 <div 
                 
@@ -614,6 +798,7 @@ const getDayLabel = (timestamp) => {
                           }}
                   
                 className={`flex ${mine ? "justify-end" : "justify-start"} mb-2 group relative`}>
+                  
                   <div >
                     
                     <div className="flex my-1">
@@ -626,7 +811,7 @@ const getDayLabel = (timestamp) => {
                           )}
                         <div
                           className={`w-fit max-w-xs px-1 py-1 rounded-xl ${
-                            mine ? "bg-[#f37c7c] text-white rounded-br-sm" : "bg-gray-200 text-gray-900 rounded-bl-sm"
+                            mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-gray-200 text-gray-900 rounded-bl-sm"
                           }`}
                           
                         >
@@ -709,7 +894,7 @@ const getDayLabel = (timestamp) => {
                                 src={msg.message}
                                 alt="sent"
                                 className="max-w-[200px] rounded-lg cursor-pointer transition-transform duration-200 group-hover:scale-[1.03]"
-                                onClick={() => window.open(msg.message, "_blank")}
+                                onClick={() => setPreviewImage(msg.message)}
                               />
                               <button
                                 onClick={async () => {
@@ -728,7 +913,7 @@ const getDayLabel = (timestamp) => {
                                     console.error("download failed", e);
                                   }
                                 }}
-                                className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition"
+                                className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition cursor-pointer"
                               >
                                 <FontAwesomeIcon icon={faCircleDown} />
                               </button>
@@ -768,7 +953,7 @@ const getDayLabel = (timestamp) => {
                                         a.click();
                                         a.remove();
                                       }}
-                                      className="text-[11px] text-blue-600 hover:underline"
+                                      className="text-[11px] text-blue-600 hover:underline cursor-pointer"
                                     >
                                       Download
                                     </button>
@@ -784,28 +969,27 @@ const getDayLabel = (timestamp) => {
 
                         {/* reactions */}
                         {reactions[msg.id] && reactions[msg.id].length > 0 && (() => {
-  // ✅ Group reactions by emoji and count them
-  const group = reactions[msg.id].reduce((acc, item) => {
-    acc[item.emoji] = acc[item.emoji] || 0;
-    acc[item.emoji] += 1;
-    return acc;
-  }, {});
-
-  return (
-    <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
-      {Object.keys(group).map((emoji, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
-          onClick={() => handleAddReaction(msg.id, emoji)}
-        >
-          <span>{emoji}</span>
-          <span className="text-xs text-gray-600">{group[emoji]}</span>
-        </div>
-      ))}
-    </div>
-  );
-})()}
+                          // ✅ Group reactions by emoji and count them
+                          const group = reactions[msg.id].reduce((acc, item) => {
+                            acc[item.emoji] = acc[item.emoji] || 0;
+                            acc[item.emoji] += 1;
+                            return acc;
+                          }, {});
+                        
+                          return (
+                            <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+                              {Object.keys(group).map((emoji, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="text-xs text-gray-600">{group[emoji]}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
 
 
                         {/* time + optional seen icon (group doesn't track per-user seen here) */}
@@ -819,18 +1003,18 @@ const getDayLabel = (timestamp) => {
                       {/* 3-dot menu */}
                       <button
                         onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
-                        className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition"
+                        className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
                       >
                         <FontAwesomeIcon icon={faEllipsisVertical} />
                       </button>
 
                       {/* popup */}
                       {showMenu === msg.id && (
-                        <div className={`absolute ${mine ? "left-0" : "right-0"} -top-0 bg-white border border-gray-200 rounded-lg shadow-md z-20 flex`}>
+                        <div ref={menuRef} className={`absolute ${mine ? "left-0" : "right-0"} -top-0 bg-white border border-gray-200 rounded-lg shadow-md z-20 flex`}>
                           <button
                             title="Reply"
                             onClick={() => { setReplyingTo(msg); setShowMenu(null); }}
-                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                           >
                             <FontAwesomeIcon icon={faReply} className="mr-1" />
                           </button>
@@ -838,7 +1022,7 @@ const getDayLabel = (timestamp) => {
                           <button
                             title="Share"
                             onClick={() => handleShare(msg)}
-                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                           >
                             <FontAwesomeIcon icon={faShareFromSquare} />
                           </button>
@@ -847,7 +1031,7 @@ const getDayLabel = (timestamp) => {
                             <button
                               title="Reaction"
                               onClick={() => setReactionPicker((p) => ({ show: !(p.show && p.msgId === msg.id), msgId: msg.id }))}
-                              className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                              className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                             >
                               <Smile className="w-4 h-4 text-gray-600 cursor-pointer inline mr-1" />
                             </button>
@@ -863,22 +1047,32 @@ const getDayLabel = (timestamp) => {
                             )}
                           </div>
 
-                          <button
+                          
+
+                          {mine ? (
+                            <>
+
+                            <button
                             title="Info"
                             onClick={() => openInfo(msg)}
-                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                           >
                             <FontAwesomeIcon icon={faCircleInfo} className="mr-1" />
                           </button>
 
-                          {mine ? (
                             <button
                               title="Delete"
-                              onClick={() => handleDelete(msg)}
-                              className="text-sm px-3 py-2 hover:bg-red-100 text-red-500 text-left"
+                              onClick={() => {
+                                setMessageToDelete(msg);   // store msg first
+                                setShowConfirm(true);      // open confirm popup
+                              }}
+                              className="text-sm px-3 py-2 hover:bg-red-100 text-red-500 text-left cursor-pointer"
                             >
                               <FontAwesomeIcon icon={faTrash} />
                             </button>
+                            
+                            </>
+                            
                           ) : null}
                         </div>
                       )}
@@ -984,7 +1178,14 @@ const getDayLabel = (timestamp) => {
   </div>
 )}
 
-
+{showScrollDown && (
+  <button
+    onClick={scrollToBottom}
+    className="absolute bottom-20 right-6 bg-white text-white p-3  rounded-full shadow-xl hover:scale-110 transition cursor-pointer"
+      >
+        <ArrowDown className="text-red-300 hover:text-gray-400" />
+      </button>
+)}
 
         {/* Input Box */}
         <div className="flex gap-2 px-3 pb-1 w-full">
@@ -1054,32 +1255,73 @@ const getDayLabel = (timestamp) => {
 
         {/* Message Info modal */}
         {selectedMsgInfo && (
-          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-            <div className="bg-white w-80 rounded-lg shadow-lg p-5 relative">
-              <h3 className="text-lg font-semibold mb-3 flex items-center">
-                <FontAwesomeIcon icon={faCircleInfo} className="mr-2 text-gray-600" />
-                Message Info
-              </h3>
+  <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+    <div className="bg-white w-80 rounded-lg shadow-lg p-5 relative">
+      <h3 className="text-lg font-semibold mb-3 flex items-center">
+        <FontAwesomeIcon icon={faCircleInfo} className="mr-2 text-gray-600" />
+        Message Info
+      </h3>
 
-              <div className="text-sm space-y-2">
-                <p className="flex justify-between">
-                  <span className="text-gray-600">Sender:</span>
-                  <span className="font-medium text-gray-900">{selectedMsgInfo.sender_name}</span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-gray-600">Time Sent:</span>
-                  <span className="font-medium text-gray-900">{new Date(selectedMsgInfo.timestamp).toLocaleString()}</span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-gray-600">Type:</span>
-                  <span className="font-medium text-gray-900">{selectedMsgInfo.message_type}</span>
-                </p>
-              </div>
+      {/* SEEN LIST */}
+{/* SEEN LIST */}
+<div className="mb-4">
+  <h4 className="font-medium text-gray-700 mb-2">Seen by</h4>
 
-              <button onClick={() => setSelectedMsgInfo(null)} className="absolute top-2 right-3 text-gray-500 hover:text-gray-700 text-lg">✖</button>
-            </div>
-          </div>
-        )}
+  {selectedMsgInfo.seen?.filter(u => u.user_id !== selectedMsgInfo.sender_id).length > 0 ? (
+ 
+    selectedMsgInfo.seen
+      .filter((u) => u.user_id !== selectedMsgInfo.sender_id)  // ⬅ REMOVE SENDER
+      .map((u, i) => (
+        <div key={i} className="flex justify-between text-sm py-1">
+          <span>{u.username}</span>
+
+          <span className="text-gray-500">
+            {(() => {
+              const date = new Date(u.seen_at);
+              const ist = new Date(date.getTime() - 5.5 * 60 * 60 * 1000);
+              return ist.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              });
+            })()}
+          </span>
+        </div>
+      ))
+  ) : (
+    <p className="text-gray-400 text-sm">No one has seen this message yet</p>
+  )}
+</div>
+
+{/* DELIVERED LIST */}
+<div className="mb-4">
+  <h4 className="font-medium text-gray-700 mb-2">Delivered to</h4>
+
+  {selectedMsgInfo.delivered
+    ?.filter(u => u.user_id !== selectedMsgInfo.sender_id).length > 0 ? (
+    selectedMsgInfo.delivered
+      .filter((u) => u.user_id !== selectedMsgInfo.sender_id)  // ⬅ REMOVE SENDER
+      .map((u, i) => (
+        <div key={i} className="text-sm py-1">
+          {u.username}
+        </div>
+      ))
+  ) : (
+    <p className="text-gray-400 text-sm">Delivered to all</p>
+  )}
+</div>
+
+
+      <button
+        onClick={() => setSelectedMsgInfo(null)}
+        className="absolute top-2 right-3 text-gray-500 hover:text-gray-700 text-lg"
+      >
+        ✖
+      </button>
+    </div>
+  </div>
+)}
+
       </div>
 
       {showInfo && (
@@ -1089,6 +1331,28 @@ const getDayLabel = (timestamp) => {
             user={user}
       />
       )}
+
+      <ConfirmPopup
+  show={showConfirm}
+  message="Delete this message?"
+  onConfirm={() => handleDelete(messageToDelete)}
+  onCancel={() => setShowConfirm(false)}
+/>
+
+      {previewImage && (
+        <div 
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          onClick={() => setPreviewImage(null)}
+        >
+          <img 
+            src={previewImage}
+            alt="Preview"
+            className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-lg"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+          />
+        </div>
+      )}
+
     </div>
   );
 };

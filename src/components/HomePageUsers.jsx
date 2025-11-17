@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFile, faImage, faPlus,faUserGroup } from "@fortawesome/free-solid-svg-icons";
 import {  Search, MessagesSquare, X   } from "lucide-react";
+import { createSocket } from "../socket";
+
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -13,6 +15,8 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const [activeChat, setActiveChat] = useState(null);
   const [showAllUsers, setShowAllUsers] = useState(false);
   const socketRef = useRef(null);
+  const [popupMsg, setPopupMsg] = useState("");
+  
   // const [isSliderOpen, setIsSliderOpen] = useState(false);
 
 
@@ -24,18 +28,21 @@ const fetchChats = React.useCallback(async () => {
         fetch(`${API_URL}/groups`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
-      const convoData = await convoRes.json();
-      const groupData = await groupRes.json();
-      
-      // 🔥 SAFE: If backend returns error or null, convert to empty array
-      const safeConvos = Array.isArray(convoData) ? convoData : [];
-      const safeGroups = Array.isArray(groupData) ? groupData : [];
-      
-      // 🔥 Now .map will NEVER crash
-      const userChats = safeConvos.map(c => ({ ...c, type: "user", hasConversation: true }));
-      const groups = safeGroups.map(g => ({ ...g, type: "group", hasConversation: true }));
-      
-      setConvos([...userChats, ...groups].sort((a, b) => new Date(b.last_time) - new Date(a.last_time)));
+        const convoData = await convoRes.json();
+        const groupData = await groupRes.json();
+        
+        // 🔥 SAFE: If backend returns error or null, convert to empty array
+        const safeConvos = Array.isArray(convoData) ? convoData : [];
+        const safeGroups = Array.isArray(groupData) ? groupData : [];
+        
+        // 🔥 Now .map will NEVER crash
+        const userChats = safeConvos.map(c => ({ ...c, type: "user", hasConversation: true }));
+        const groups = safeGroups.map(g => ({ ...g, type: "group", hasConversation: true }));
+        
+        const merged = [...userChats, ...groups];
+        setConvos(uniqueById(merged).sort((a, b) => getTimeValue(b.last_time) - getTimeValue(a.last_time)));
+
+
     } catch (err) {
       console.error("Error fetching chats:", err);
     }
@@ -44,6 +51,26 @@ const fetchChats = React.useCallback(async () => {
   useEffect(() => {
     fetchChats();
   }, [fetchChats, lastMessageUpdate]);
+
+  const uniqueById = (list) => {
+    const map = new Map();
+    list.forEach(item => {
+      const key = item.type === "group" ? `g-${item.id}` : `u-${item.other_user_id || item.user_id || item.id}`;
+      if (!map.has(key)) map.set(key, item);
+    });
+    return [...map.values()];
+  };
+
+  // ✅ Initialize socket
+    useEffect(() => {
+      if (!token) return;
+      const s = createSocket(token);
+      socketRef.current = s;
+  
+      s.on("connect", () => {
+        // console.log("Socket connected");
+      });
+    },[token]);
 
 
 
@@ -93,35 +120,35 @@ const fetchChats = React.useCallback(async () => {
 
 
 
-  // ✅ 3. Listen for new group messages (must be at top level too)
-  useEffect(() => {
-    const s = socketRef.current;
-    if (!s) return;
+  // // ✅ 3. Listen for new group messages (must be at top level too)
+  // useEffect(() => {
+  //   const s = getSocket();
+  //   if (!s) return;
 
-    s.on("receive_group_message", (msg) => {
-      setConvos(prev => {
-        const updated = prev.map(chat =>
-          chat.id === msg.group_id && chat.type === "group"
-            ? {
-                ...chat,
-                last_message: msg.message,
-                last_message_type: msg.message_type,
-                last_time: new Date().toISOString(),
-                unread: (chat.unread || 0) + 1
-              }
-            : chat
-        );
+  //   s.on("receive_group_message", (msg) => {
+  //     setConvos(prev => {
+  //       const updated = prev.map(chat =>
+  //         chat.id === msg.group_id && chat.type === "group"
+  //           ? {
+  //               ...chat,
+  //               last_message: msg.message,
+  //               last_message_type: msg.message_type,
+  //               last_time: new Date().toISOString(),
+  //               unread: (chat.unread || 0) + 1
+  //             }
+  //           : chat
+  //       );
 
-        const groupChat = updated.find(c => c.id === msg.group_id && c.type === "group");
-        const others = updated.filter(c => !(c.id === msg.group_id && c.type === "group"));
-        return groupChat
-          ? [groupChat, ...others].sort((a, b) => getTimeValue(b.last_time) - getTimeValue(a.last_time))
-          : updated;
-      });
-    });
+  //       const groupChat = updated.find(c => c.id === msg.group_id && c.type === "group");
+  //       const others = updated.filter(c => !(c.id === msg.group_id && c.type === "group"));
+  //       return groupChat
+  //         ? [groupChat, ...others].sort((a, b) => getTimeValue(b.last_time) - getTimeValue(a.last_time))
+  //         : updated;
+  //     });
+  //   });
 
-    return () => s.off("receive_group_message");
-  }, []);
+  //   return () => s.off("receive_group_message");
+  // }, []);
 
 
   const listToShow = showAllUsers
@@ -147,12 +174,15 @@ const fetchChats = React.useCallback(async () => {
 
       const data = await res.json();
       if (data.success) {
-        setConvos((prev) => [...prev, { ...data.conversation, hasConversation: true }]);
+        setConvos((prev) =>
+          uniqueById([...prev, { ...data.conversation, hasConversation: true }])
+        );
+
         setSearchTerm("");
         onSelectConversation(data.conversation);
         window.location.reload();
       } else {
-        alert("Failed to create conversation.");
+        setPopupMsg("Failed to create conversation.");
       }
     } catch (err) {
       console.error("Error creating conversation:", err);
@@ -310,29 +340,47 @@ const timeAgoGroup = (dateString) => {
             const isActive = activeChat === (c.id || c.user_id);
 
             return (
+
               <button
                 key={c.id || c.user_id}
+
                 onClick={async () => {
-                  setActiveChat(c.id || c.user_id);
-                
-                  // ✅ Instantly reset unread for this chat in UI
-                  setConvos((prev) =>
-                    prev.map((chat) =>
-                      chat.id === c.id || chat.user_id === c.user_id
-                        ? { ...chat, unread: 0 }
-                        : chat
-                    )
-                  );
-                
-                  if (c.type === "group") {
-                    onSelectConversation({ ...c, isGroup: true });
-                  } else {
-                    onSelectConversation(c);
-                  }
-                
-                  // ✅ Now refresh all chats so others updates their unread count
-                  await fetchChats();
-                }}
+
+  if (showAllUsers) return;
+
+  setActiveChat(c.id || c.user_id);
+
+  // RESET unread instantly for the opened chat
+  setConvos((prev) =>
+    prev.map((chat) => {
+      if (chat.type === "group" && chat.id === c.id) {
+        return { ...chat, unread: 0 };
+      }
+      if (chat.type === "user" && chat.user_id === c.user_id) {
+        return { ...chat, unread: 0 };
+      }
+      return chat;
+    })
+  );
+
+  // OPEN CHAT
+  if (c.type === "group") {
+    onSelectConversation({ ...c, isGroup: true });
+
+    // 🔥 also mark seen on backend immediately
+    fetch(`${API_URL}/group_seen/${c.id}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+  } else {
+    onSelectConversation(c);
+  }
+
+  // refresh sidebar
+  await fetchChats();
+}}
+
 
                 className={`w-full p-4 flex items-start space-x-3 hover:bg-red-50 transition-colors cursor-pointer ${
                   isActive ? "bg-red-50" : ""
@@ -466,7 +514,27 @@ const timeAgoGroup = (dateString) => {
         )}
       </div>
 
-      
+        {popupMsg && (
+        <div className="fixed inset-0 bg-[#2e2e2e69] bg-opacity-30 z-140 transition-opacity h-full blur-3xl"></div>
+      )}
+
+      {popupMsg && (
+  <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                  bg-white p-6 rounded-xl z-150 flex flex-col space-y-1 min-w-80 shadow-lg text-center">
+    <h2 className="text-gray-800 text-2xl font-semibold">Message</h2>
+
+    <div className="text-red-600 bg-red-50 px-10  py-3 rounded-lg text-[16px] my-3">
+      {popupMsg}
+    </div>
+
+    <button
+      onClick={() => setPopupMsg("")}
+      className="bg-[#f37c7c] text-white py-1 px-3 rounded-lg hover:bg-[#ef6061] w-30 mx-auto mt-2"
+    >
+      OK
+    </button>
+  </div>
+)}
 
 
     </div>

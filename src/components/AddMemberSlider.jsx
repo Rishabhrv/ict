@@ -9,6 +9,7 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [showGroupSlider, setShowGroupSlider] = useState(false);
+  const [popupMsg, setPopupMsg] = useState("");
 
   // 🔹 Fetch all users on open
   useEffect(() => {
@@ -134,7 +135,7 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
           <button
             onClick={() => {
               if (selectedUsers.length === 0) {
-                alert("Select at least one member!");
+                setPopupMsg("Please select at least one member!");
                 return;
               }
               setShowGroupSlider(true);
@@ -158,6 +159,29 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
           onClose();
         }}
       />
+
+      {popupMsg && (
+        <div className="fixed inset-0 bg-[#2e2e2e69] bg-opacity-30 z-40 transition-opacity h-full blur-3xl"></div>
+      )}
+
+      {popupMsg && (
+  <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                  bg-white p-6 rounded-xl z-50 flex flex-col space-y-1 min-w-80 shadow-2xl text-center">
+    <h2 className="text-gray-800 text-2xl font-semibold">Warning</h2>
+
+    <h2 className="text-red-600 bg-red-50 px-10  py-3 rounded-lg text-[16px] my-3 text-center">
+      {popupMsg}
+    </h2>
+
+    <button
+      onClick={() => setPopupMsg("")}
+      className="bg-[#f37c7c] text-white py-1 px-3 rounded-lg hover:bg-[#ef6061] w-30 mx-auto mt-2"
+    >
+      OK
+    </button>
+  </div>
+)}
+
     </>
   );
 };

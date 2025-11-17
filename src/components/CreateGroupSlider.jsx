@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowLeft, faCheck } from "@fortawesome/free-solid-svg-icons";
+import {
+  Users,
+} from "lucide-react";
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -8,6 +11,8 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
   const [groupName, setGroupName] = useState("");
   const [groupImage, setGroupImage] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [popupMsg, setPopupMsg] = useState("");
+
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -19,7 +24,7 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
 
   const handleCreate = async () => {
   if (!groupName.trim()) {
-    alert("Please enter a group name.");
+    setPopupMsg("Please enter a group name!");
     return;
   }
 
@@ -39,11 +44,13 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
 
     const data = await res.json();
     if (data.success) {
-      alert("✅ Group created successfully!");
+      setPopupMsg("✅ Group created successfully!");
       onCreateGroup(data.group);
       onClose();
+      window.location.reload();
+
     } else {
-      alert("❌ Failed to create group.");
+      setPopupMsg("❌ Failed to create group.");
     }
   } catch (err) {
     console.error("Error creating group:", err);
@@ -85,17 +92,17 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
                 />
               ) : (
                 <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mb-2">
-                  +
+                  <Users className="w-10 h-10"/>
                 </div>
               )}
               <input
                 type="file"
-                accept="image/*"
+                accept=""
                 className="hidden"
                 onChange={handleImageChange}
               />
             </label>
-            <p className="text-xs text-gray-500">Click to upload group image</p>
+            <p className="text-xs text-gray-500">Enter Group Name</p>
           </div>
 
           {/* Group Name Input */}
@@ -125,13 +132,36 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
           {/* Create Button */}
           <button
             onClick={handleCreate}
-            className="bg-[#f37c7c] w-full text-white py-2 rounded-full hover:bg-[#ef6061] transition"
+            className="bg-[#f37c7c] w-full text-white py-2 rounded-full hover:bg-[#ef6061] transition cursor-pointer"
           >
             <FontAwesomeIcon icon={faCheck} className="mr-2" />
             Create Group
           </button>
         </div>
       </div>
+
+      {popupMsg && (
+        <div className="fixed inset-0 bg-[#2e2e2e69] bg-opacity-30 z-140 transition-opacity h-full blur-3xl"></div>
+      )}
+
+      {popupMsg && (
+  <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                  bg-white p-6 rounded-xl z-150 flex flex-col space-y-1 min-w-80 shadow-lg text-center">
+    <h2 className="text-gray-800 text-2xl font-semibold">Message</h2>
+
+    <div className="text-red-600 bg-red-50 px-10  py-3 rounded-lg text-[16px] my-3">
+      {popupMsg}
+    </div>
+
+    <button
+      onClick={() => setPopupMsg("")}
+      className="bg-[#f37c7c] text-white py-1 px-3 rounded-lg hover:bg-[#ef6061] w-30 mx-auto mt-2"
+    >
+      OK
+    </button>
+  </div>
+)}
+
     </>
   );
 };

@@ -30,7 +30,9 @@ import EmojiPicker from "emoji-picker-react";
 import BackImage from "../components/Images/1211.jpg";
 import ShareMessageModal from "./ShareMessageModal";
 // import useFCM from "../hooks/useFCM";
-import ImageIcon from "../components/Images/1f4ac.png"
+import ImageIcon from "../components/Images/1f4ac.png";
+import ConfirmPopup from "./ConfirmPopup";
+
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -62,11 +64,53 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleteMsgId, setDeleteMsgId] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
+  const LIMIT = 100;
+
 
   // const authToken = token;
   // const userId = user.id;
 
   // useFCM({ token: authToken, userId });
+
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(null); // 👈 CLOSE MENU
+      }
+    }
+  
+    document.addEventListener("mousedown", handleClickOutside);
+  
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const confirmDeleteMessage = async () => {
+  setShowConfirm(false);
+
+  try {
+    const res = await fetch(`${API_URL}/delete_message/${deleteMsgId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== deleteMsgId));
+      
+      const s = getSocket();
+      if (s) s.emit("delete_message", { id: deleteMsgId, conversation_id: conversation.id });
+    }
+  } catch (err) {
+    console.error("❌ Delete error:", err);
+  }
+};
+
 
 
 
@@ -163,6 +207,14 @@ const showErrorPopup = (message) => {
   setTimeout(() => setShowPopup(false), 4000); // auto close after 4 sec
 };
 
+const isNearBottom = () => {
+  const el = messagesRef.current;
+  if (!el) return true;
+
+  const threshold = 150; // px from bottom
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+};
+
   // ✅ Initialize socket
   useEffect(() => {
     if (!token) return;
@@ -197,9 +249,14 @@ const showErrorPopup = (message) => {
     }
   }
 
+   const shouldScroll = isNearBottom(); 
+
       if (conversation && msg.conversation_id === conversation.id) {
         setMessages((prev) => {
-          const exists = prev.some((m) => {
+
+          const list = Array.isArray(prev) ? prev : [];
+
+          const exists = list.some((m) => {
             const mIST = toIST(m.timestamp);
             const msgIST = toIST(msg.timestamp);
             return (
@@ -208,7 +265,7 @@ const showErrorPopup = (message) => {
               Math.abs(mIST - msgIST) < 2000
             );
           });
-          return exists ? msg : [...prev, msg];
+          return exists ? list : [...list, msg];
         });
 
         // 🔹 Notify parent about last message update
@@ -220,6 +277,12 @@ const showErrorPopup = (message) => {
         timestamp: msg.timestamp,
       });
     }
+
+    if (shouldScroll) {
+    setTimeout(() => {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    }, 20);
+  }
       }
     });
 
@@ -340,12 +403,13 @@ useEffect(() => {
 
   // ✅ Auto-scroll when new messages arrive
 useEffect(() => {
-  if (messagesRef.current && offset === 0) {
+  if (offset === 0) {
+    // only on initial load (first batch)
     setTimeout(() => {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }, 20);
   }
-}, [messages, offset]);
+}, [messages,offset]);
 
   const scrollToBottom = () => {
     messagesRef.current.scrollTo({
@@ -420,6 +484,46 @@ const handlePastedFile = (file) => {
 };
 
 
+useEffect(() => {
+  if (!conversation) return;
+
+  // ⭐ MUST RESET STATE WHEN SWITCHING CHAT
+  setMessages([]);
+  setOffset(0);
+  setHasMore(true);
+
+  const loadInitialMessages = async () => {
+    try {
+      const res = await fetch(
+        `${API_URL}/messages/${conversation.id}?limit=${LIMIT}&offset=0`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await res.json();
+      const safeData = Array.isArray(data) ? data : [];
+
+      setMessages(safeData);
+
+      // ⭐ Update offset based on first load
+      setOffset(safeData.length);
+
+      // ⭐ If less than LIMIT messages → no more messages → hide button
+      if (safeData.length < LIMIT) {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error("Initial load error:", err);
+    }
+  };
+
+  loadInitialMessages();
+}, [conversation, token]);
+
+
+
+
+
+
 
   // ✅ Send message
 const sendMessage = async () => {
@@ -435,6 +539,12 @@ const sendMessage = async () => {
       message_type: "text",
       reply_to: replyingTo ? replyingTo.id : null,
     });
+
+    setTimeout(() => {
+  if (messagesRef.current) {
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  }
+}, 20);
 
     setInput("");
     setReplyingTo(null);
@@ -616,7 +726,7 @@ useEffect(() => {
               <div className="flex justify-center my-2">
                 <button
                   id="loadMoreBtn"
-                  className="hidden bg-gray-200 text-sm px-4 py-1 rounded-full text-gray-700 hover:bg-gray-300 transition"
+                  className="hidden bg-gray-200 text-sm px-4 py-1 rounded-full text-gray-700 hover:bg-gray-300 transition cursor-pointer"
                   onClick={loadOlderMessages}
                   disabled={loadingMore}
                 >
@@ -689,7 +799,7 @@ useEffect(() => {
                         <div
                           className={`w-fit max-w-xs px-[5px] py-[4px] rounded-xl  ${
                             mine
-                              ? "bg-[#f37c7c] text-white rounded-br-sm ml-15"
+                              ? "bg-[#f37c7c] text-white rounded-br-sm ml-15 ml-auto"
                               : "bg-gray-300 text-gray-900 rounded-bl-sm"
                           }`}
                         >
@@ -799,7 +909,7 @@ useEffect(() => {
                           src={fileUrl}
                           alt="sent"
                           className="max-w-[200px] rounded-lg cursor-pointer transition-transform duration-200 group-hover:scale-[1.03]"
-                          onClick={() => window.open(fileUrl, "_blank")}
+                          onClick={() => setPreviewImage(fileUrl)}
                         />
                         <button
                           onClick={async () => {
@@ -818,7 +928,7 @@ useEffect(() => {
                               console.error("Download failed:", error);
                             }
                           }}
-                          className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition"
+                          className="absolute bottom-1 right-1 text-gray-500 rounded-md text-lg opacity-0 group-hover:opacity-100 transition cursor-pointer"
                         >
                           <FontAwesomeIcon icon={faCircleDown} />
                         </button>
@@ -887,7 +997,7 @@ useEffect(() => {
                             <div
                               key={i}
                               className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
-                              onClick={() => handleAddReaction(msg.id, emoji)} // toggle off
+                              // onClick={() => handleAddReaction(msg.id, emoji)} // toggle off
                             >
                               <span>{emoji}</span>
                             </div>
@@ -928,6 +1038,7 @@ useEffect(() => {
                   {/* 📋 Popup Menu */}
                     {showMenu === msg.id && (
                       <div
+                        ref={menuRef}
                         className={`absolute ${
                           mine ? "left-0" : "right-0"
                         } -top-0  bg-white border border-gray-200 rounded-lg shadow-md z-20 flex `}
@@ -938,7 +1049,7 @@ useEffect(() => {
                             setReplyingTo(msg);  // ✅ Store the message being replied to
                             setShowMenu(null);   // Close menu
                           }}
-                          className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                          className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                         >
                           <FontAwesomeIcon icon={faReply} className="mr-1" />
                         </button>
@@ -948,7 +1059,7 @@ useEffect(() => {
                             setMessageToShare(msg);   
                             setShowShareModal(true);  
                           }}
-                          className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                          className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                         >
                           <FontAwesomeIcon icon={faShareFromSquare} /> 
                         </button>
@@ -986,40 +1097,32 @@ useEffect(() => {
                             )}
                           </div>
 
-                      {/* ℹ️ Message Info */}
+                     
+                      {mine ? 
+                      <> {/* ℹ️ Message Info */}
                       <button
                         title="Info"
                         onClick={() => {
                           setSelectedMsgInfo(msg);
                           setShowMenu(null);
                         }}
-                        className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left"
+                        className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                       >
                         <FontAwesomeIcon icon={faCircleInfo} className="mr-1" />
                       </button>
-                      {mine ? 
-                      <button
+                      
+                       <button
                           title="Delete"
                           onClick={async () => {   // ✅ add async here
-                            if (!window.confirm("Delete this message?")) return;
-                            try {
-                              const res = await fetch(`${API_URL}/delete_message/${msg.id}`, {
-                                method: "DELETE",
-                                headers: { Authorization: `Bearer ${token}` },
-                              });
-                              if (res.ok) {
-                                setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-                                const s = getSocket();
-                                if (s) s.emit("delete_message", { id: msg.id, conversation_id: conversation.id });
-                              }
-                            } catch (err) {
-                              console.error("Delete error:", err);
-                            }
+                            setDeleteMsgId(msg.id);   // store this message ID
+                            setShowConfirm(true);
                           }}
-                        className="text-sm px-3 py-2 hover:bg-red-100 text-red-500 text-left"
+                        className="text-sm px-3 py-2 hover:bg-red-100 text-red-500 text-left cursor-pointer"
                       >
                         <FontAwesomeIcon icon={faTrash} />
                       </button>
+                      </>
+                     
                       : ""}
                     </div>
                   )}
@@ -1035,7 +1138,7 @@ useEffect(() => {
     {showScrollBottom && (
       <button
         onClick={scrollToBottom}
-        className="absolute bottom-20 right-6 bg-white text-white p-3  rounded-full shadow-xl hover:scale-110 transition"
+        className="absolute bottom-20 right-6 bg-white text-white p-3  rounded-full shadow-xl hover:scale-110 transition cursor-pointer"
       >
         <ArrowDown className="text-red-300 hover:text-gray-400" />
       </button>
@@ -1306,6 +1409,28 @@ useEffect(() => {
           sendShareMessage(); // or handle your logic here
         }}
       />
+      <ConfirmPopup
+        show={showConfirm}
+        message="Delete this message?"
+        onConfirm={confirmDeleteMessage}
+        onCancel={() => setShowConfirm(false)}
+      />
+
+      {previewImage && (
+        <div 
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          onClick={() => setPreviewImage(null)}
+        >
+          <img 
+            src={previewImage}
+            alt="Preview"
+            className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-lg"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+          />
+        </div>
+      )}
+
+
 
 
 
