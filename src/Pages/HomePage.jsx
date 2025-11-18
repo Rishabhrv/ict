@@ -41,6 +41,7 @@ const VALID_ACCESS = {
   "Tasks": "tasks",
   "Details": "details",
   "Message": "messages",
+  "Attendance": "attendance",
   // Non-loop buttons
   "Add Book": "add_book_dialog",
   "Authors Edit": "edit_author_detail"
