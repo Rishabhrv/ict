@@ -68,6 +68,8 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   const [deleteMsgId, setDeleteMsgId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const LIMIT = 100;
+  const [showFormatBar, setShowFormatBar] = useState(false);
+  const [formatBarPos, setFormatBarPos] = useState({ top: 0, left: 0 });
 
 
   // const authToken = token;
@@ -625,11 +627,76 @@ useEffect(() => {
 }, [token]);
 
 
+const handleTextSelection = () => {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+
+  if (start === end) {
+    setShowFormatBar(false);
+    return;
+  }
+
+  const rect = textarea.getBoundingClientRect();
+
+  setFormatBarPos({
+    top: rect.top - 40,   // show above textarea
+    left: rect.left + 20, // slight left shift
+  });
+
+  setShowFormatBar(true);
+};
+
+
+const formatMessage = (text) => {
+  if (!text) return "";
+
+  return text
+    .replace(/(\*)(.*?)\*/g, "<b>$2</b>")        // *bold*
+    .replace(/_(.*?)_/g, "<i>$1</i>")            // _italic_
+    .replace(/~(.*?)~/g, "<s>$1</s>")            // ~strike~
+    .replace(/`(.*?)`/g, "<code>$1</code>")      // `code`
+    .replace(/\n/g, "<br>");                     // new lines
+};
+
+
+
+const applyFormat = (type) => {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+
+  let selected = input.slice(start, end);
+  if (!selected) return;
+
+  let wrapper = "";
+  if (type === "bold") wrapper = "*";
+  if (type === "italic") wrapper = "_";
+  if (type === "strike") wrapper = "~";
+
+  const formatted = wrapper + selected + wrapper;
+
+  const newText =
+    input.slice(0, start) + formatted + input.slice(end);
+
+  setInput(newText);
+  setShowFormatBar(false);
+};
+
+
+
 useEffect(() => {
   if (Notification.permission !== "granted") {
     Notification.requestPermission();
   }
 }, []);
+
+
+
 
 
     // ✅ If no conversation selected, show empty state
@@ -660,7 +727,7 @@ useEffect(() => {
   onDragLeave={handleDragLeave}
   onDrop={handleDrop}>
         {/* Header */}
-        <div className="flex border-b border-gray-200 py-4 px-6 justify-between bg-white">
+        <div className="flex border-b border-gray-200 py-3 pb-4 px-6 justify-between bg-white">
           <div className="flex">
             <div className="relative">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-semibold bg-gradient-to-br from-[#f37c7c] to-[#ef6061] text-white">
@@ -797,7 +864,7 @@ useEffect(() => {
                       <div>
 
                         <div
-                          className={`w-fit max-w-xs px-[5px] py-[4px] rounded-xl  ${
+                          className={`w-fit max-w-xl px-[5px] py-[4px] rounded-xl  ${
                             mine
                               ? "bg-[#f37c7c] text-white rounded-br-sm ml-15 ml-auto"
                               : "bg-gray-300 text-gray-900 rounded-bl-sm"
@@ -987,7 +1054,10 @@ useEffect(() => {
                         </div>
                             );
                           } else {
-                            return <p className="text-sm break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1">{msg.message}</p>;
+                            return <p
+                                    className="text-sm leading-relaxed  break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1"
+                                    dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
+                                  />;
                           }
                         })()}
                     </div>
@@ -1187,7 +1257,7 @@ useEffect(() => {
           </div>
         <button
           onClick={closeInfoModal}
-          className="absolute top-2 right-3 text-gray-500 hover:text-gray-700 text-lg"
+          className="absolute top-2 right-3 text-gray-500 hover:text-gray-700 text-lg cursor-pointer"
         >
           ✖
         </button>
@@ -1204,6 +1274,35 @@ useEffect(() => {
 
   
           <div className={`absolute sendmsg m-3 bottom-0 z-10 ${showInfo ? "shrink" : ""}`}>
+            {showFormatBar && (
+                <div
+                  className="fixed z-[9999] bg-white shadow-[0_0_15px_rgba(0,0,0,0.15)]  rounded-lg px-3 py-1 flex gap-4 "
+                  style={{
+                    top: formatBarPos.top,
+                    left: formatBarPos.left
+                  }}
+                >
+                  <button
+                    className="font-bold text-gray-700 hover:text-black cursor-pointer p-1"
+                    onClick={() => applyFormat("bold")}
+                  >
+                    B
+                  </button>
+                  <button
+                    className="italic text-gray-700 hover:text-black cursor-pointer p-1"
+                    onClick={() => applyFormat("italic")}
+                  >
+                    I
+                  </button>
+                  <button
+                    className="line-through text-gray-700 hover:text-black cursor-pointer p-1"
+                    onClick={() => applyFormat("strike")}
+                  >
+                    S
+                  </button>
+                </div>
+              )}
+
 
             {/* ✅ Show selected files preview before sending */}
             {pendingFiles.length > 0 && (
@@ -1373,6 +1472,8 @@ useEffect(() => {
                       sendMessage();
                     }
                   }}
+                  onMouseUp={handleTextSelection}
+                  onKeyUp={handleTextSelection}
                 />
             </div>
 

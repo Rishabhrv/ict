@@ -56,6 +56,8 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const textareaRef = useRef(null);
+  const [showFormatBar, setShowFormatBar] = useState(false);
+  const [formatBarPos, setFormatBarPos] = useState({ top: 0, left: 0 });
   
   
   
@@ -700,6 +702,71 @@ const getDayLabel = (timestamp) => {
 }, [messages]);
 
 
+
+
+const handleTextSelection = () => {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+
+  if (start === end) {
+    setShowFormatBar(false);
+    return;
+  }
+
+  const rect = textarea.getBoundingClientRect();
+
+  setFormatBarPos({
+    top: rect.top - 40,   // show above textarea
+    left: rect.left + 20, // slight left shift
+  });
+
+  setShowFormatBar(true);
+};
+
+
+const formatMessage = (text) => {
+  if (!text) return "";
+
+  return text
+    .replace(/(\*)(.*?)\*/g, "<b>$2</b>")        // *bold*
+    .replace(/_(.*?)_/g, "<i>$1</i>")            // _italic_
+    .replace(/~(.*?)~/g, "<s>$1</s>")            // ~strike~
+    .replace(/`(.*?)`/g, "<code>$1</code>")      // `code`
+    .replace(/\n/g, "<br>");                     // new lines
+};
+
+
+
+const applyFormat = (type) => {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+
+  let selected = input.slice(start, end);
+  if (!selected) return;
+
+  let wrapper = "";
+  if (type === "bold") wrapper = "*";
+  if (type === "italic") wrapper = "_";
+  if (type === "strike") wrapper = "~";
+
+  const formatted = wrapper + selected + wrapper;
+
+  const newText =
+    input.slice(0, start) + formatted + input.slice(end);
+
+  setInput(newText);
+  setShowFormatBar(false);
+};
+
+
+
+
   // ----- Render -----
   return (
     <div className="flex w-full">
@@ -816,7 +883,7 @@ const getDayLabel = (timestamp) => {
                             </p>
                           )}
                         <div
-                          className={`w-fit max-w-xs px-1 py-1 rounded-xl ${
+                          className={`w-fit max-w-xl px-1 py-1 rounded-xl ${
                             mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-gray-200 text-gray-900 rounded-bl-sm"
                           }`}
                           
@@ -970,7 +1037,11 @@ const getDayLabel = (timestamp) => {
                           )}
 
                           {/* Text */}
-                          {msg.message_type === "text" && <p className="text-sm break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1">{msg.message}</p>}
+                          {msg.message_type === "text" && <p
+                              className="text-sm leading-relaxed break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1"
+                              dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
+                            />
+                          }
                         </div>
 
                         {/* reactions */}
@@ -1092,6 +1163,35 @@ const getDayLabel = (timestamp) => {
 
         <div className="flex justify-center">
           <div className={`absolute sendmsg m-3 bottom-0 z-10 ${showInfo ? "shrink" : ""}`}>
+
+            {showFormatBar && (
+                <div
+                  className="fixed z-[9999] bg-white shadow-[0_0_15px_rgba(0,0,0,0.15)]  rounded-lg px-3 py-1 flex gap-4"
+                  style={{
+                    top: formatBarPos.top,
+                    left: formatBarPos.left
+                  }}
+                >
+                  <button
+                    className="font-bold text-gray-700 hover:text-black cursor-pointer p-1"
+                    onClick={() => applyFormat("bold")}
+                  >
+                    B
+                  </button>
+                  <button
+                    className="italic text-gray-700 hover:text-black cursor-pointer p-1"
+                    onClick={() => applyFormat("italic")}
+                  >
+                    I
+                  </button>
+                  <button
+                    className="line-through text-gray-700 hover:text-black cursor-pointer p-1"
+                    onClick={() => applyFormat("strike")}
+                  >
+                    S
+                  </button>
+                </div>
+              )}
 
           {/* pending files preview (keeps UI consistent with HomePageMsg) */}
         {pendingFiles.length > 0 && (
@@ -1244,6 +1344,8 @@ const getDayLabel = (timestamp) => {
                   }}
               onChange={(e) => { setInput(e.target.value); emitTyping(true); setTimeout(() => emitTyping(false), 1200); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+              onMouseUp={handleTextSelection}
+              onKeyUp={handleTextSelection}
             />
           </div>
 

@@ -435,7 +435,8 @@ const timeAgoGroup = (dateString) => {
       
       if (!c.last_message) return `${sender}: No messages yet`;
 
-      if (c.last_message_type === "text") return `${sender}: ${c.last_message}`;
+      if (c.last_message_type === "text")
+        return `${sender}: ${c.last_message.replace(/[*_~`]/g, "")}`;
 
       if (c.last_message_type === "file") {
         const fileName = c.last_message.split("/").pop();
@@ -459,12 +460,12 @@ const timeAgoGroup = (dateString) => {
         );
       }
 
-      return `${sender}: ${c.last_message}`;
+      return `${sender}: ${c.last_message.replace(/[*_~`]/g, "")}`;
     }
 
     // ✅ normal user chat below
     if (!c.last_message) return c.email || "No messages yet";
-    if (c.last_message_type === "text") return c.last_message;
+    if (c.last_message_type === "text") return c.last_message.replace(/[*_~`]/g, "");
 
     if (c.last_message_type === "file") {
       const fileName = c.last_message.split("/").pop();

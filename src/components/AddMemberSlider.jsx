@@ -76,7 +76,7 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
           <h2 className="text-lg font-semibold text-gray-500">Add Members</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-xl"
+            className="text-gray-500 hover:text-gray-700 text-xl cursor-pointer"
           >
             ✕
           </button>
