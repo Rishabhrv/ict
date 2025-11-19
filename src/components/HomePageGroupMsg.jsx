@@ -55,6 +55,8 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const textareaRef = useRef(null);
+  
   
   
 
@@ -478,6 +480,10 @@ useEffect(() => {
     // then upload files if any
     if (pendingFiles.length > 0) {
       await uploadAndSendFiles();
+    }
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "40px";
     }
   };
 
@@ -964,7 +970,7 @@ const getDayLabel = (timestamp) => {
                           )}
 
                           {/* Text */}
-                          {msg.message_type === "text" && <p className="text-sm break-words px-2 py-1">{msg.message}</p>}
+                          {msg.message_type === "text" && <p className="text-sm break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1">{msg.message}</p>}
                         </div>
 
                         {/* reactions */}
@@ -1223,10 +1229,19 @@ const getDayLabel = (timestamp) => {
             
 
             <textarea
+              ref={textareaRef}
               style={{ height: "40px" }}
               className="w-full outline-none text-sm mt-[1.5%] overflow-y-auto"
               placeholder="Type a message..."
               value={input}
+              onInput={(e) => {
+                    e.target.style.height = "auto"; // reset height to measure
+                    const maxHeight = 150; // pixels
+                    e.target.style.height =
+                      e.target.scrollHeight > maxHeight
+                        ? `${maxHeight}px`
+                        : `${e.target.scrollHeight}px`;
+                  }}
               onChange={(e) => { setInput(e.target.value); emitTyping(true); setTimeout(() => emitTyping(false), 1200); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
             />
