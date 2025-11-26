@@ -285,7 +285,15 @@ const timeAgoGroup = (dateString) => {
 
 
 
+function getChatKey(c) {
+  if (c.type === "group") return `group-${c.id}`;
 
+  // If conversation exists → use conversation_id
+  if (c.hasConversation && c.id) return `convo-${c.id}`;
+
+  // If it's a search result user → use user id
+  return `user-${c.id}`;
+}
 
 
   return (
@@ -385,24 +393,19 @@ const timeAgoGroup = (dateString) => {
           listToShow.map((c) => {
             const name = c.type === "group" ? c.group_name : c.other_username || c.username;
             const avatarLetter = name ? name.charAt(0).toUpperCase() : "?";
-            const isActive =
-                  activeChat ===
-                  (c.type === "group"
-                    ? `group-${c.id}`
-                    : `user-${c.id}`);
+            
+const isActive = activeChat === getChatKey(c);
+
 
             return (
 
               <button
-                key={c.id || c.user_id}
+                key={getChatKey(c)}
 
                onClick={async () => {
-  if (showAllUsers) return;
+                if (showAllUsers) return;
 
-  const identity =
-    c.type === "group"
-      ? `group-${c.id}`
-      : `user-${c.id}`;
+                const identity = getChatKey(c);
 
   setActiveChat(identity);
 
@@ -421,13 +424,11 @@ const timeAgoGroup = (dateString) => {
     return;
   }
 
-  // 🔥 If SEARCH RESULT user & conversation exists → find it
-  if (c.type === "user" && c.hasConversation) {
-    const existing = convos.find(
-      (chat) =>
-        chat.type === "user" &&
-        (chat.other_user_id === c.id || chat.user_id === c.id)
-    );
+        // 🔥 If SEARCH RESULT user & conversation exists → find it
+        if (c.type === "user" && c.hasConversation) {
+          const existing = convos.find(
+            (chat) => chat.type === "user" && chat.user_id === c.id
+          );
 
     if (existing) {
       await fetch(`${API_URL}/seen/${existing.id}`, {
