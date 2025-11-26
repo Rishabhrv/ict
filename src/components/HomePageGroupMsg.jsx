@@ -58,6 +58,17 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const textareaRef = useRef(null);
   const [showFormatBar, setShowFormatBar] = useState(false);
   const [formatBarPos, setFormatBarPos] = useState({ top: 0, left: 0 });
+  const [expandedWords, setExpandedWords] = useState({});
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState([]);
+  const [selectedShareUsers, setSelectedShareUsers] = useState([])
+  const [popupMsg, setPopupMsg] = useState(""); // ✅ popup message state
+  const [showPopup, setShowPopup] = useState(false); // ✅ visibility state
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+    
+  
+  
+  
   
   
   
@@ -347,6 +358,8 @@ useEffect(() => {
   setHasMore(true);
   setOffset(0);
   setMessages([]);
+  setMultiSelectMode(false);
+  setSelectedMessages([]);
 
   const loadInitialMessages = async () => {
     const res = await fetch(
@@ -603,18 +616,20 @@ const getDayLabel = (timestamp) => {
   };
 
   // click on share: open modal (or fallback prompt)
-  const handleShare = (msg) => {
-    setMessageToShare(msg);
-    setShowShareModal(true);
-  };
 
-  // when share modal returns selected user ids
-  const doShareToUsers = async (selectedUserIds) => {
-    if (!messageToShare || !selectedUserIds?.length) return;
-    // re-use ShareMessageModal logic from 1:1: create conversation then socket send_message for each
-    const s = socketRef.current;
-    for (const targetUserId of selectedUserIds) {
-      try {
+
+  const sendShareMessage = async () => {
+    if (!selectedShareUsers.length || !messageToShare) return;
+  
+    const messagesToSend = Array.isArray(messageToShare)
+      ? messageToShare
+      : [messageToShare];
+  
+    try {
+      const s = getSocket();
+  
+      for (const targetUserId of selectedShareUsers) {
+        // Create/find conversation
         const res = await fetch(`${API_URL}/createConversation`, {
           method: "POST",
           headers: {
@@ -626,24 +641,43 @@ const getDayLabel = (timestamp) => {
             user2_id: targetUserId,
           }),
         });
+  
         const data = await res.json();
         if (!data.success) continue;
-        const conv = data.conversation;
-        // send via socket (1:1 send_message event)
-        s?.emit("send_message", {
-          token,
-          conversation_id: conv.id,
-          message: messageToShare.message || messageToShare.message,
-          message_type: messageToShare.message_type === "image" ? "image" : (messageToShare.message_type === "file" ? "file" : "text"),
-        });
-      } catch (err) {
-        console.error("Share to user error:", err);
+  
+        const newConv = data.conversation;
+  
+        // Send each message
+        for (const msg of messagesToSend) {
+          s.emit("send_message", {
+            token,
+            conversation_id: newConv.id,
+            message: msg.message,
+            message_type: msg.message_type,
+          });
+        }
       }
+  
+      setShowShareModal(false);
+      setMessageToShare(null);
+      setSelectedShareUsers([]);
+      exitMultiSelect();
+  
+      showErrorPopup("Messages forwarded successfully! ✅");
+  
+    } catch (err) {
+      console.error(err);
+      showErrorPopup("Failed to forward message ❌");
     }
-    setShowShareModal(false);
-    setMessageToShare(null);
   };
 
+
+  const showErrorPopup = (message) => {
+  setPopupMsg(message);
+  setShowPopup(true);
+  setTimeout(() => setShowPopup(false), 4000); // auto close after 4 sec
+};
+  
   // message info modal show
   const openInfo = async (msg) => {
     setSelectedMsgInfo(msg);
@@ -664,6 +698,30 @@ const getDayLabel = (timestamp) => {
     }, 1500);
   }
 };
+
+
+
+const toggleSelectMessage = (msgId) => {
+  if (!multiSelectMode) {
+    setMultiSelectMode(true);
+    setSelectedMessages([msgId]);
+    return;
+  }
+
+  setSelectedMessages((prev) =>
+    prev.includes(msgId)
+      ? prev.filter((id) => id !== msgId)
+      : [...prev, msgId]
+  );
+};
+
+const exitMultiSelect = () => {
+  setMultiSelectMode(false);
+  setSelectedMessages([]);
+};
+
+
+
 
   // typing indicator emit
   const emitTyping = (isTyping) => {
@@ -727,6 +785,45 @@ const handleTextSelection = () => {
 };
 
 
+const getWordChunks = (text, limit) => {
+  if (!text) return { shown: "", hasMore: false };
+
+  // Split only for counting words, not for slicing text
+  const words = text.trim().split(/\s+/);
+
+  if (words.length <= limit) {
+    return { shown: text, hasMore: false };
+  }
+
+  // Rebuild substring safely:
+  let wordCount = 0;
+  let cutIndex = text.length;
+
+  for (let i = 0; i < text.length; i++) {
+    if (/\s/.test(text[i])) continue;
+
+    // Word started — count it
+    if (
+      i === 0 ||
+      /\s/.test(text[i - 1])
+    ) {
+      wordCount++;
+      if (wordCount > limit) {
+        cutIndex = i;
+        break;
+      }
+    }
+  }
+
+  return {
+    shown: text.substring(0, cutIndex),
+    hasMore: true
+  };
+};
+
+
+
+
 const formatMessage = (text) => {
   if (!text) return "";
 
@@ -765,6 +862,39 @@ const applyFormat = (type) => {
 };
 
 
+const handleBulkDeleteConfirmed = async () => {
+  const ownMessages = selectedMessages.filter((id) => {
+    const msg = messages.find((m) => m.id === id);
+    return msg?.sender_id === user.id;   // only delete my messages
+  });
+
+  if (ownMessages.length === 0) {
+    showErrorPopup("You can delete only your own messages ❌");
+    return;
+  }
+
+  try {
+    for (const msgId of ownMessages) {
+      await fetch(`${API_URL}/delete_group_message/${msgId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Remove from UI
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    }
+
+    setMultiSelectMode(false);
+    setSelectedMessages([]);
+    showErrorPopup("Messages deleted ✔");
+
+  } catch (err) {
+    console.error(err);
+    showErrorPopup("Failed to delete messages ❌");
+  }
+};
+
+
 
 
   // ----- Render -----
@@ -784,9 +914,9 @@ const applyFormat = (type) => {
         onDrop={handleDrop}
       >
         {/* Header */}
-        <div className="flex border-b border-gray-200 py-3 px-6 justify-between bg-white">
+        <div className="flex border-b border-gray-200 py-2 px-6 justify-between bg-white shadow-sm">
           <div className="flex items-center">
-            <Users className="w-11 h-11 rounded-full object-cover bg-gray-100 p-2 text-gray-600" />
+            <Users className="w-12 h-12 rounded-full object-cover bg-gray-100 p-2 text-gray-600" />
             <div className="pl-3">
               <h3 className="text-lg font-semibold text-gray-900">
                 {conversation?.group_name || "Study Group"}
@@ -813,21 +943,65 @@ const applyFormat = (type) => {
           </div>
         )}
 
+        {multiSelectMode && (
+          <div className="w-full bg-white border-b border-gray-200 py-2 px-5 flex justify-between items-center shadow-md z-50">
+            <p className="text-gray-700 font-medium">
+              {selectedMessages.length} selected
+            </p>
+        
+            <div className="flex gap-4">
+              <button
+                className="text-gray-500 hover:text-gray-800 text-sm cursor-pointer"
+                onClick={exitMultiSelect}
+              >
+                Cancel
+              </button>
+        
+              <button
+                className="text-red-500 font-medium hover:text-red-600 text-sm cursor-pointer"
+                onClick={() => {
+                  setShowShareModal(true);
+                  setMessageToShare(
+                    messages.filter((m) => selectedMessages.includes(m.id))
+                  );
+                }}
+              >
+                Forward
+              </button>
+              <span>|</span>
+              <button
+                className="text-red-600 font-medium cursor-pointer"
+                onClick={() => {
+                  setBulkDeleteMode(true);
+                  setShowConfirm(true);   // open Popup
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Messages */}
         <div
           className="height-of-msg pt-4 overflow-y-auto px-8 hide-scrollbar"
           ref={messagesRef}
         >
           {hasMore && (
-  <div className="text-center py-2">
-    <button
-      onClick={loadOlderMessages}
-      className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full  text-sm hover:bg-gray-300 cursor-pointer"
-    >
-      {loadingMore ? "Loading..." : "Load older messages"}
-    </button>
-  </div>
-)}
+            <div className="text-center py-2">
+              <button
+                onClick={loadOlderMessages}
+                className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full  text-xs hover:bg-gray-300 cursor-pointer"
+              >
+                {loadingMore ? "Loading..." : "Load older messages"}
+              </button>
+            </div>
+          )}
+          {showPopup && (
+            <div className="fixed top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300">
+              {popupMsg}
+            </div>
+          )}
           {messages.map((rawMsg, idx) => {
             // support both shapes: {text,type,mine,id} or backend group shape
             const msg = {
@@ -865,15 +1039,23 @@ const applyFormat = (type) => {
                 
 
                 <div 
-                
                   ref={(el) => {
                             if (el) messageRefs.current[msg.id] = el;
                           }}
-                  
-                className={`flex ${mine ? "justify-end" : "justify-start"} mb-2 group relative`}>
-                  
+                  className={`flex ${mine ? "justify-end" : "justify-start"} mb-2 group relative 
+                  ${selectedMessages.includes(msg.id) ? "bg-[#ffe8e8] rounded-lg" : ""}`}
+                  onClick={(e) => {
+                    if (multiSelectMode) {
+                      toggleSelectMessage(msg.id);
+                      return;
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    toggleSelectMessage(msg.id);
+                  }}
+                >
                   <div >
-                    
                     <div className="flex my-1">
                       <div>
                         {/* ✅ ADD THIS HERE */}
@@ -882,82 +1064,164 @@ const applyFormat = (type) => {
                               {msg.sender_name}
                             </p>
                           )}
-                        <div
-                          className={`w-fit max-w-xl px-1 py-1 rounded-xl ${
-                            mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-gray-200 text-gray-900 rounded-bl-sm"
-                          }`}
+                          <div className="flex">
+                             {/* popup */}
+                      {mine && showMenu === msg.id && (
+                        <div ref={menuRef} className={`-top-0 bg-white border border-gray-200 rounded-lg shadow-md z-20 flex max-h-10 my-auto ml-5`}>
+                          <button
+                            title="Reply"
+                            onClick={() => { setReplyingTo(msg); setShowMenu(null); }}
+                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
+                          >
+                            <FontAwesomeIcon icon={faReply} className="mr-1" />
+                          </button>
+
+                          <button
+                            title="Share"
+                            onClick={() => {
+                              setMultiSelectMode(true);
+                              setSelectedMessages([msg.id]);
+                            }}
+                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
+                          >
+                            <FontAwesomeIcon icon={faShareFromSquare} />
+                          </button>
+
+                          <div className="relative">
+                            <button
+                              title="Reaction"
+                              onClick={() => setReactionPicker((p) => ({ show: !(p.show && p.msgId === msg.id), msgId: msg.id }))}
+                              className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
+                            >
+                              <Smile className="w-4 h-4 text-gray-600 cursor-pointer inline mr-1" />
+                            </button>
+
+                            {reactionPicker.show && reactionPicker.msgId === msg.id && (
+                              <div className={`absolute top-full ${mine ? "left-0" : "right-0"} bg-white shadow-lg rounded-lg p-2 flex space-x-2 z-50`}>
+                                {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((emoji) => (
+                                  <button key={emoji} onClick={() => { handleAddReaction(msg.id, emoji); setReactionPicker({ show: false, msgId: null }); }} className="text-lg hover:scale-125 transition-transform cursor-pointer">
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
                           
-                        >
-                          
-                        {msg.reply_to && (
-  <div
-    className={`text-xs mb-1 p-1 rounded-md cursor-pointer hover:bg-gray-100 transition ${
-      mine ? "border-white bg-white text-red-700" : "border-gray-400 bg-white text-red-700"
-    }`}
-    onClick={() => scrollToMessage(msg.reply_to)}
-  >
-    {/* 🧍 Username */}
-    <p className="truncate font-semibold">
-      {msg.reply_to_message?.sender_name || "Message Deleted"}
-    </p>
 
-    {/* 🧠 Auto-detect message type */}
-    {(() => {
-      const replyText = msg.reply_to_message?.message || "";
+                          {mine ? (
+                            <>
 
-      // 🖼️ IMAGE DETECTION
-      if (
-        replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
-        (replyText.startsWith("http") &&
-          replyText.includes("/uploads/") &&
-          replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
-      ) {
-        return (
-          <div className="flex items-center gap-2 mt-1 cursor-pointer">
-            <img
-              src={replyText}
-              alt="reply-img"
-              className="w-[100%] h-20 rounded"
-            />
-          </div>
-        );
-      }
+                            <button
+                            title="Info"
+                            onClick={() => openInfo(msg)}
+                            className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
+                          >
+                            <FontAwesomeIcon icon={faCircleInfo} className="mr-1" />
+                          </button>
 
-      // 📎 FILE DETECTION (with file icons)
-      if (
-        replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
-        (replyText.startsWith("http") &&
-          replyText.includes("/uploads/") &&
-          replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i))
-      ) {
-        const fileName = replyText.split("/").pop();
-        const ext = fileName.split(".").pop().toLowerCase();
+                            <button
+                              title="Delete"
+                              onClick={() => {
+                                setMessageToDelete(msg);   // store msg first
+                                setShowConfirm(true);      // open confirm popup
+                              }}
+                              className="text-sm px-3 py-2 hover:bg-red-100 text-red-500 text-left cursor-pointer"
+                            >
+                              <FontAwesomeIcon icon={faTrash} />
+                            </button>
+                            
+                            </>
+                            
+                          ) : null}
+                        </div>
+                      )}
+                            {mine ? 
+                                <button
+                                  onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
+                                  className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                                >
+                                  <FontAwesomeIcon icon={faEllipsisVertical} />
+                                </button>
 
-        let fileIcon = "📎";
-        if (["pdf"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePdf} />;
-        else if (["doc", "docx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileWord} />;
-        else if (["xls", "xlsx", "csv"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileExcel} />;
-        else if (["ppt", "pptx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePowerpoint} />;
-        else if (["zip", "rar", "7z"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileZipper} />;
-        else if (["txt"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFile} />;
+                                : <></>
+                              }
+                              
+                            <div
+                            className={`w-fit max-w-xl px-1 py-1 rounded-xl shadow-xl ${
+                              mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-gray-200 text-gray-900 rounded-bl-sm"
+                            }`}
+                            
+                          >
+                            {msg.reply_to && (
+                              <div
+                                className={`text-xs mb-1 p-1 rounded-md cursor-pointer hover:bg-gray-100 transition ${
+                                  mine ? "border-white bg-white text-red-700" : "border-gray-400 bg-white text-red-700"
+                                }`}
+                                onClick={() => scrollToMessage(msg.reply_to)}
+                              >
+                                {/* 🧍 Username */}
+                                <p className="truncate font-semibold">
+                                  {msg.reply_to_message?.sender_name || "Message Deleted"}
+                                </p>
 
-        return (
-          <div className="flex items-center gap-2 mt-1 cursor-pointer">
-            <span className="text-[13px]">{fileIcon}</span>
-            <span className="truncate max-w-[120px]">{fileName}</span>
-          </div>
-        );
-      }
+                                  {/* 🧠 Auto-detect message type */}
+                                  {(() => {
+                                    const replyText = msg.reply_to_message?.message || "";
 
-      // 💬 TEXT fallback
-      return (
-        <p className="truncate text-red-700 text-[12px] mt-1">
-          {replyText.length > 70 ? replyText.slice(0, 70) + "..." : replyText}
-        </p>
-      );
-    })()}
-  </div>
-)}
+                                    // 🖼️ IMAGE DETECTION
+                                    if (
+                                      replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
+                                      (replyText.startsWith("http") &&
+                                        replyText.includes("/uploads/") &&
+                                        replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
+                                    ) {
+                                      return (
+                                        <div className="flex items-center gap-2 mt-1 cursor-pointer">
+                                          <img
+                                            src={replyText}
+                                            alt="reply-img"
+                                            className="w-[100%] h-20 rounded"
+                                          />
+                                        </div>
+                                      );
+                                    }
+
+                                  // 📎 FILE DETECTION (with file icons)
+                                  if (
+                                    replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
+                                    (replyText.startsWith("http") &&
+                                      replyText.includes("/uploads/") &&
+                                      replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i))
+                                  ) {
+                                    const fileName = replyText.split("/").pop();
+                                    const ext = fileName.split(".").pop().toLowerCase();
+                            
+                                    let fileIcon = "📎";
+                                    if (["pdf"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePdf} />;
+                                    else if (["doc", "docx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileWord} />;
+                                    else if (["xls", "xlsx", "csv"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileExcel} />;
+                                    else if (["ppt", "pptx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePowerpoint} />;
+                                    else if (["zip", "rar", "7z"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileZipper} />;
+                                    else if (["txt"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFile} />;
+                            
+                                    return (
+                                      <div className="flex items-center gap-2 mt-1 cursor-pointer">
+                                        <span className="text-[13px]">{fileIcon}</span>
+                                        <span className="truncate max-w-[120px]">{fileName}</span>
+                                      </div>
+                                    );
+                                    }
+
+                                  // 💬 TEXT fallback
+                                  return (
+                                    <p className="truncate text-red-700 text-[12px] mt-1">
+                                      {replyText.length > 70 ? replyText.slice(0, 70) + "..." : replyText}
+                                    </p>
+                                  );
+                                })()}
+                              </div>
+                            )}
 
 
                           {/* Image */}
@@ -966,7 +1230,7 @@ const applyFormat = (type) => {
                               <img
                                 src={msg.message}
                                 alt="sent"
-                                className="max-w-[200px] rounded-lg cursor-pointer transition-transform duration-200 group-hover:scale-[1.03]"
+                                className="max-w-[200px] rounded-xl cursor-pointer transition-transform duration-200 group-hover:scale-[1.02]"
                                 onClick={() => setPreviewImage(msg.message)}
                               />
                               <button
@@ -1014,7 +1278,7 @@ const applyFormat = (type) => {
                                     <FontAwesomeIcon icon={fileIcon} className={`${iconColor} text-lg`} />
                                   </div>
                                   <div className="flex-1">
-                                    <p className="text-xs font-semibold text-gray-800 w-44 break-words whitespace-normal">
+                                    <p className="text-xs font-medium text-gray-800 w-44 break-words whitespace-normal">
                                       {fileName}
                                     </p>
                                     <button
@@ -1037,57 +1301,73 @@ const applyFormat = (type) => {
                           )}
 
                           {/* Text */}
-                          {msg.message_type === "text" && <p
-                              className="text-sm leading-relaxed break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1"
-                              dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
-                            />
+                          {msg.message_type === "text" && 
+                            <div className="w-full">
+                                {(() => {
+                                  const fullText = msg.message || "";
+                                  const currentLimit = expandedWords[msg.id] || 100;
+                              
+                                  const { shown, hasMore } = getWordChunks(fullText, currentLimit);
+                              
+                                  return (
+                                    <>
+                                      <p
+                                        className="text-sm leading-relaxed break-words ml-1 whitespace-pre-wrap px-2 py-1 pl-1"
+                                        dangerouslySetInnerHTML={{ __html: formatMessage(shown) }}
+                                      />
+                              
+                                    {/* Read More / Show Less */}
+                                    {hasMore ? (
+                                      <div className="text-right">
+                                        <button
+                                        className={` ${mine ? `text-white` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
+                                        onClick={() =>
+                                          setExpandedWords((prev) => ({
+                                            ...prev,
+                                            [msg.id]: currentLimit + 100
+                                          }))
+                                        }
+                                      >
+                                        Read more
+                                      </button>
+                                      </div>
+                                      
+                                    ) : fullText.split(/\s+/).length > 100 ? (
+                                      <div className="text-right">
+                                        <button
+                                        className={` ${mine ? `text-white` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
+                                          onClick={() =>
+                                            setExpandedWords((prev) => ({
+                                              ...prev,
+                                              [msg.id]: 100
+                                            }))
+                                          }
+                                        >
+                                          Show less
+                                        </button>
+
+                                      </div>
+                                        
+                                      ) : null}
+                                    </>
+                                  );
+                                })()}
+                              </div>
                           }
                         </div>
-
-                        {/* reactions */}
-                        {reactions[msg.id] && reactions[msg.id].length > 0 && (() => {
-                          // ✅ Group reactions by emoji and count them
-                          const group = reactions[msg.id].reduce((acc, item) => {
-                            acc[item.emoji] = acc[item.emoji] || 0;
-                            acc[item.emoji] += 1;
-                            return acc;
-                          }, {});
-                        
-                          return (
-                            <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
-                              {Object.keys(group).map((emoji, i) => (
-                                <div
-                                  key={i}
-                                  className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
-                                >
-                                  <span>{emoji}</span>
-                                  <span className="text-xs text-gray-600">{group[emoji]}</span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-
-
-                        {/* time + optional seen icon (group doesn't track per-user seen here) */}
-                        <div className={`flex ${mine ? "justify-end" : ""}`}>
-                          <p className={`text-xs pt-1 text-gray-500 ${mine ? "text-right" : "text-left"}`}>
-                            {formatTime(msg.timestamp)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* 3-dot menu */}
-                      <button
-                        onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
-                        className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
-                      >
-                        <FontAwesomeIcon icon={faEllipsisVertical} />
-                      </button>
+                        {mine ? <></>
+                          : 
+                          <button
+                            onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
+                            className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                          >
+                            <FontAwesomeIcon icon={faEllipsisVertical} />
+                          </button>
+                          }
 
                       {/* popup */}
-                      {showMenu === msg.id && (
-                        <div ref={menuRef} className={`absolute ${mine ? "left-0" : "right-0"} -top-0 bg-white border border-gray-200 rounded-lg shadow-md z-20 flex`}>
+                      {!mine && showMenu === msg.id && (
+                        <div ref={menuRef} className={`-top-0 bg-white border border-gray-200 rounded-lg shadow-md z-20 flex max-h-10 my-auto ml-5`}>
                           <button
                             title="Reply"
                             onClick={() => { setReplyingTo(msg); setShowMenu(null); }}
@@ -1098,7 +1378,10 @@ const applyFormat = (type) => {
 
                           <button
                             title="Share"
-                            onClick={() => handleShare(msg)}
+                            onClick={() => {
+                                setMultiSelectMode(true);
+                                setSelectedMessages([msg.id]);
+                            }}
                             className="block w-full text-xs px-2 py-2 hover:bg-gray-100 text-gray-700 text-left cursor-pointer"
                           >
                             <FontAwesomeIcon icon={faShareFromSquare} />
@@ -1116,7 +1399,7 @@ const applyFormat = (type) => {
                             {reactionPicker.show && reactionPicker.msgId === msg.id && (
                               <div className={`absolute top-full ${mine ? "left-0" : "right-0"} bg-white shadow-lg rounded-lg p-2 flex space-x-2 z-50`}>
                                 {["👍", "❤️", "😂", "😮", "😢", "🔥"].map((emoji) => (
-                                  <button key={emoji} onClick={() => { handleAddReaction(msg.id, emoji); setReactionPicker({ show: false, msgId: null }); }} className="text-lg hover:scale-125 transition-transform">
+                                  <button key={emoji} onClick={() => { handleAddReaction(msg.id, emoji); setReactionPicker({ show: false, msgId: null }); }} className="text-lg hover:scale-125 transition-transform cursor-pointer">
                                     {emoji}
                                   </button>
                                 ))}
@@ -1153,6 +1436,42 @@ const applyFormat = (type) => {
                           ) : null}
                         </div>
                       )}
+
+
+                      </div>
+
+                        {/* reactions */}
+                        {reactions[msg.id] && reactions[msg.id].length > 0 && (() => {
+                          // ✅ Group reactions by emoji and count them
+                          const group = reactions[msg.id].reduce((acc, item) => {
+                            acc[item.emoji] = acc[item.emoji] || 0;
+                            acc[item.emoji] += 1;
+                            return acc;
+                          }, {});
+                        
+                          return (
+                            <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+                              {Object.keys(group).map((emoji, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="text-xs text-gray-600">{group[emoji]}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
+
+                        {/* time + optional seen icon (group doesn't track per-user seen here) */}
+                        <div className={`flex ${mine ? "justify-end" : ""}`}>
+                          <p className={`text-xs pt-1 text-gray-500 ${mine ? "text-right" : "text-left"}`}>
+                            {formatTime(msg.timestamp)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1361,20 +1680,22 @@ const applyFormat = (type) => {
 
         {/* Share modal (uses your existing ShareMessageModal if available) */}
         <ShareMessageModal
-          isOpen={showShareModal}
-          onClose={() => { setShowShareModal(false); setMessageToShare(null); }}
-          token={token}
-          API_URL={API_URL}
-          currentUser={user}
-          onShare={(selectedUserIds) => doShareToUsers(selectedUserIds)}
-          message={messageToShare}
-        />
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        token={token}
+        API_URL={API_URL}
+        currentUser={user}
+        onShare={(selectedUserIds) => {
+          setSelectedShareUsers(selectedUserIds);
+          sendShareMessage(); // or handle your logic here
+        }}
+      />
 
         {/* Message Info modal */}
         {selectedMsgInfo && (
   <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
     <div className="bg-white w-80 rounded-lg shadow-lg p-5 relative">
-      <h3 className="text-lg font-semibold mb-3 flex items-center">
+      <h3 className="text-lg font-medium mb-3 flex items-center">
         <FontAwesomeIcon icon={faCircleInfo} className="mr-2 text-gray-600" />
         Message Info
       </h3>
@@ -1392,17 +1713,31 @@ const applyFormat = (type) => {
         <div key={i} className="flex justify-between text-sm py-1">
           <span>{u.username}</span>
 
-          <span className="text-gray-500">
+          <span className="text-gray-500 whitespace-nowrap">
             {(() => {
+              if (!u.seen_at) return "--:--";
+          
               const date = new Date(u.seen_at);
+          
+              // Convert UTC → IST (+5 hours 30 minutes)
               const ist = new Date(date.getTime() - 5.5 * 60 * 60 * 1000);
-              return ist.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: true,
-              });
+          
+              const time = ist
+                .toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })
+                .replace(" ", ""); // Remove space before AM/PM
+          
+              const day = String(ist.getDate()).padStart(2, "0");
+              const month = String(ist.getMonth() + 1).padStart(2, "0");
+              const year = ist.getFullYear();
+          
+              return `${time} ${day}/${month}/${year}`;
             })()}
           </span>
+
         </div>
       ))
   ) : (
@@ -1449,12 +1784,31 @@ const applyFormat = (type) => {
       />
       )}
 
-      <ConfirmPopup
-  show={showConfirm}
-  message="Delete this message?"
-  onConfirm={() => handleDelete(messageToDelete)}
-  onCancel={() => setShowConfirm(false)}
-/>
+        <ConfirmPopup
+          show={showConfirm}
+          message={bulkDeleteMode ? "Delete selected messages?" : "Delete this message?"}
+          onConfirm={() => {
+            setShowConfirm(false);
+        
+            if (bulkDeleteMode) {
+              handleBulkDeleteConfirmed();   // 🔥 MULTI DELETE LOGIC
+              setBulkDeleteMode(false);
+              return;
+            }
+        
+            // 🔥 SINGLE DELETE
+            if (messageToDelete) {
+              handleDelete(messageToDelete);
+            }
+          }}
+          onCancel={() => {
+            setShowConfirm(false);
+            setBulkDeleteMode(false);
+          }}
+        />
+
+
+
 
       {previewImage && (
         <div 

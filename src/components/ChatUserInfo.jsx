@@ -1,12 +1,55 @@
 import React, { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faImages, faFileAlt, faCircleDown } from "@fortawesome/free-solid-svg-icons";
+import ConfirmPopup from "./ConfirmPopup";
+
 
 const API_URL = process.env.REACT_APP_API_URL; 
 
 const ChatUserInfo = ({ token, conversation, user }) => {
   const [mediaFiles, setMediaFiles] = useState([]);
   const [activeTab, setActiveTab] = useState("docs"); // 🔹 tab control
+  const [showConfirm, setShowConfirm] = useState(false);
+  const storedSession = localStorage.getItem("session_id");
+
+
+
+
+  const handleRemove = async () => {
+  setShowConfirm(false);
+
+  if (!conversation?.id || !user?.id) {
+    alert("Missing conversation or user");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/delete_user_from_conversation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        conversation_id: conversation.id,
+        user_id: user.id,
+        session_id: storedSession,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      window.location.reload();
+    } else {
+      console.error(data.error || "Failed to remove user");
+    }
+  } catch (err) {
+    console.error("Remove user error:", err);
+    alert("Something went wrong");
+  }
+};
+
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -32,7 +75,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
   const docFiles = mediaFiles.filter((f) => f.message_type === "file");
 
   return (
-    <div className="w-70 p-3 pt-10 text-center">
+    <div className="w-70 p-3  pt-10 text-center overflow-y-auto max-h-screen hide-scrollbar shadow-sm">
       {/* User Info Header */}
       <div className="flex items-center justify-center">
         <h1 className="text-5xl bg-gray-100 rounded-full p-7 text-center px-6">
@@ -40,7 +83,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
         </h1>
       </div>
 
-      <h6 className="text-lg my-2 font-semibold text-gray-500">
+      <h6 className="text-lg my-2 font-medium text-gray-500">
         {conversation.other_username}
       </h6>
 
@@ -106,7 +149,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
               >
                 <FontAwesomeIcon icon={faFileAlt} className="text-gray-500" />
                 <div className="">
-                  <p className="text-xs font-semibold text-gray-700 truncate w-40">
+                  <p className="text-xs font-medium text-gray-700 truncate w-40">
                     {file.file_url.split("/").pop()}
                   </p>
                 </div>
@@ -124,9 +167,26 @@ const ChatUserInfo = ({ token, conversation, user }) => {
           ) : (
             <p className="text-gray-400 text-sm text-center">No documents yet</p>
           )}
+          
         </div>
       )}
-    </div>
+
+
+        <button
+          className="bg-red-100 py-1 px-20 rounded-lg mt-2 text-red-400 font-semibold hover:bg-red-400 hover:text-white hover:shadow-lg cursor-pointer"
+          onClick={() => setShowConfirm(true)}
+        >
+          Remove
+        </button>
+
+        <ConfirmPopup
+          show={showConfirm}
+          message="Are you sure you want to leave this conversation?"
+          onConfirm={handleRemove}
+          onCancel={() => setShowConfirm(false)}
+        />
+
+   </div>
   );
 };
 

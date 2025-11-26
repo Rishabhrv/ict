@@ -16,37 +16,93 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const [showAllUsers, setShowAllUsers] = useState(false);
   const socketRef = useRef(null);
   const [popupMsg, setPopupMsg] = useState("");
+  const storedSession = localStorage.getItem("session_id");
+  
+
   
   // const [isSliderOpen, setIsSliderOpen] = useState(false);
 
 
+const normalizeChats = (items) =>
+  items.map(i => ({
+    ...i,
+    sort_time: 
+      i.last_time || 
+      i.last_message_time || 
+      i.updated_at || 
+      i.created_at || 
+      0
+  }));
+
+
+const getTimeValue = (t) => {
+  if (!t) return 0;
+
+  t = t.trim();
+
+  // GROUP TIME: "2025-11-21 17:08:11"
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(t)) {
+    const [datePart, timePart] = t.split(" ");
+    return new Date(`${datePart}T${timePart}.000+05:30`).getTime();
+  }
+
+  // USER TIME: GMT → convert manually to IST
+  if (t.includes("GMT")) {
+    const utcMs = new Date(t).getTime();
+    return utcMs - (5.5 * 60 * 60 * 1000); // add IST offset
+  }
+
+  // Fallback
+  return new Date(t).getTime();
+};
+
+
+
+
+
 
 const fetchChats = React.useCallback(async () => {
-    try {
-      const [convoRes, groupRes] = await Promise.all([
-        fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_URL}/groups`, { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
+  try {
+    const [convoRes, groupRes] = await Promise.all([
+      fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/groups`, { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
 
-        const convoData = await convoRes.json();
-        const groupData = await groupRes.json();
-        
-        // 🔥 SAFE: If backend returns error or null, convert to empty array
-        const safeConvos = Array.isArray(convoData) ? convoData : [];
-        const safeGroups = Array.isArray(groupData) ? groupData : [];
-        
-        // 🔥 Now .map will NEVER crash
-        const userChats = safeConvos.map(c => ({ ...c, type: "user", hasConversation: true }));
-        const groups = safeGroups.map(g => ({ ...g, type: "group", hasConversation: true }));
-        
-        const merged = [...userChats, ...groups];
-        setConvos(uniqueById(merged).sort((a, b) => getTimeValue(b.last_time) - getTimeValue(a.last_time)));
+    const convoData = await convoRes.json();
+    const groupData = await groupRes.json();
+
+    const safeConvos = Array.isArray(convoData) ? convoData : [];
+    const safeGroups = Array.isArray(groupData) ? groupData : [];
+
+    const userChats = safeConvos.map(c => ({ ...c, type: "user", hasConversation: true }));
+    const groups = safeGroups.map(g => ({ ...g, type: "group", hasConversation: true }));
+
+    const merged = [...userChats, ...groups];
 
 
-    } catch (err) {
-      console.error("Error fetching chats:", err);
-    }
-  }, [token]);
+    // 🔥 NORMALIZE
+    const normalized = normalizeChats(merged);
+
+
+    // 🔥 SORT
+    const sorted = normalized.sort(
+      (a, b) => getTimeValue(b.sort_time) - getTimeValue(a.sort_time)
+    );
+
+
+
+    // 🔥 UNIQUE BY ID
+    const finalList = uniqueById(sorted);
+
+
+
+    setConvos(finalList);
+
+  } catch (err) {
+    console.error("Error fetching chats:", err);
+  }
+}, [token]);
+
 
   useEffect(() => {
     fetchChats();
@@ -74,81 +130,70 @@ const fetchChats = React.useCallback(async () => {
 
 
 
-  // ✅ 2. Search Users + Groups
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setSearchResults([]);
-      return;
+ // ✅ 2. Search Users + Groups (FULLY FIXED)
+useEffect(() => {
+  if (!searchTerm.trim()) {
+    setSearchResults([]);
+    return;
+  }
+
+  setLoading(true);
+
+  const timer = setTimeout(async () => {
+    try {
+      const [userRes, groupRes] = await Promise.all([
+        fetch(`${API_URL}/users?search=${encodeURIComponent(searchTerm)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${API_URL}/groups?search=${encodeURIComponent(searchTerm)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+      ]);
+
+      const users = await userRes.json();
+      const groups = await groupRes.json();
+
+      const lower = searchTerm.toLowerCase();
+
+      // 🔥 Get names of all users you already chatted with
+      const existingUsernames = new Set(
+        convos
+          .filter(c => c.type === "user")
+          .map(c => c.other_username || c.username)
+      );
+
+      // 🔥 FILTER groups by group_name
+      const filteredGroups = groups
+        .filter(g => g.group_name?.toLowerCase().includes(lower))
+        .map(g => ({
+          ...g,
+          type: "group",
+          hasConversation: true
+        }));
+
+      // 🔥 FILTER users by username
+      const filteredUsers = users
+        .filter(u => u.username?.toLowerCase().includes(lower))
+        .map(u => ({
+          ...u,
+          type: "user",
+          hasConversation: existingUsernames.has(u.username)
+        }));
+
+      // 🔥 FINAL SEARCH RESULTS (correct)
+      setSearchResults([...filteredGroups, ...filteredUsers]);
+
+    } catch (err) {
+      console.error("Search error:", err);
     }
 
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const [userRes, groupRes] = await Promise.all([
-          fetch(`${API_URL}/users?search=${encodeURIComponent(searchTerm)}`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_URL}/groups?search=${encodeURIComponent(searchTerm)}`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
+    setLoading(false);
+  }, 100);
 
-        const users = await userRes.json();
-        const groups = await groupRes.json();
-
-        setSearchResults([
-          ...groups.map(g => ({ ...g, type: "group" })),
-          ...users.map(u => ({ ...u, type: "user" })),
-        ]);
-      } catch (err) {
-        console.error("Search error:", err);
-      }
-      setLoading(false);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm, token]);
-
-        const getTimeValue = (t) => {
-        if (!t) return 0;      
-
-        // If group format "2025-11-12 12:49:31"
-        if (t.includes(" ")) {
-          return new Date(t.replace(" ", "T") + "-05:30").getTime();
-        }      
-
-        // Normal ISO format (user chat)
-        return new Date(t).getTime();
-      };
+  return () => clearTimeout(timer);
+}, [searchTerm, token, convos]);
 
 
-
-
-  // // ✅ 3. Listen for new group messages (must be at top level too)
-  // useEffect(() => {
-  //   const s = getSocket();
-  //   if (!s) return;
-
-  //   s.on("receive_group_message", (msg) => {
-  //     setConvos(prev => {
-  //       const updated = prev.map(chat =>
-  //         chat.id === msg.group_id && chat.type === "group"
-  //           ? {
-  //               ...chat,
-  //               last_message: msg.message,
-  //               last_message_type: msg.message_type,
-  //               last_time: new Date().toISOString(),
-  //               unread: (chat.unread || 0) + 1
-  //             }
-  //           : chat
-  //       );
-
-  //       const groupChat = updated.find(c => c.id === msg.group_id && c.type === "group");
-  //       const others = updated.filter(c => !(c.id === msg.group_id && c.type === "group"));
-  //       return groupChat
-  //         ? [groupChat, ...others].sort((a, b) => getTimeValue(b.last_time) - getTimeValue(a.last_time))
-  //         : updated;
-  //     });
-  //   });
-
-  //   return () => s.off("receive_group_message");
-  // }, []);
 
 
   const listToShow = showAllUsers
@@ -169,6 +214,7 @@ const fetchChats = React.useCallback(async () => {
         body: JSON.stringify({
           user1_id: user.id,
           user2_id: otherUserId,
+          session_id: storedSession
         }),
       });
 
@@ -230,12 +276,14 @@ const timeAgoGroup = (dateString) => {
   const diffDays = Math.floor(diffMs / 86400000);
 
   if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes} min ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+  if (diffMinutes < 60) return `${diffMinutes} mins`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} `;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} `;
 
   return messageTime.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 };
+
+
 
 
 
@@ -246,7 +294,7 @@ const timeAgoGroup = (dateString) => {
       <div className="p-4 pb-0 border-b border-gray-200 pt-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{user.username}</h2>
+            <h2 className="text-xl font-semibold text-gray-900">{user.username}</h2>
           </div>
           <div className="flex">
             {/* <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -307,7 +355,7 @@ const timeAgoGroup = (dateString) => {
             placeholder="Search messages..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f37c7c]"
+            className="w-full text-[13px] pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f37c7c]"
           />
         </div>
 
@@ -337,50 +385,81 @@ const timeAgoGroup = (dateString) => {
           listToShow.map((c) => {
             const name = c.type === "group" ? c.group_name : c.other_username || c.username;
             const avatarLetter = name ? name.charAt(0).toUpperCase() : "?";
-            const isActive = activeChat === (c.id || c.user_id);
+            const isActive =
+                  activeChat ===
+                  (c.type === "group"
+                    ? `group-${c.id}`
+                    : `user-${c.other_user_id || c.user_id || c.id}`);
 
             return (
 
               <button
                 key={c.id || c.user_id}
 
-                onClick={async () => {
-
+               onClick={async () => {
   if (showAllUsers) return;
 
-  setActiveChat(c.id || c.user_id);
+  const identity =
+    c.type === "group"
+      ? `group-${c.id}`
+      : `user-${c.other_user_id || c.user_id || c.id}`;
 
-  // RESET unread instantly for the opened chat
+  setActiveChat(identity);
+
+  // RESET unread instantly
   setConvos((prev) =>
     prev.map((chat) => {
-      if (chat.type === "group" && chat.id === c.id) {
-        return { ...chat, unread: 0 };
-      }
-      if (chat.type === "user" && chat.user_id === c.user_id) {
-        return { ...chat, unread: 0 };
-      }
+      if (chat.type === "group" && chat.id === c.id) return { ...chat, unread: 0 };
+      if (chat.type === "user" && chat.user_id === c.user_id) return { ...chat, unread: 0 };
       return chat;
     })
   );
 
-  // OPEN CHAT
-  if (c.type === "group") {
-    onSelectConversation({ ...c, isGroup: true });
-
-    // 🔥 also mark seen on backend immediately
-    fetch(`${API_URL}/group_seen/${c.id}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-  } else {
-    onSelectConversation(c);
+  // 🔥 If SEARCH RESULT user & no conversation → create it
+  if (c.type === "user" && !c.hasConversation) {
+    await createConversation(c.id);
+    return;
   }
 
-  // refresh sidebar
-  await fetchChats();
-}}
+  // 🔥 If SEARCH RESULT user & conversation exists → find it
+  if (c.type === "user" && c.hasConversation) {
+    const existing = convos.find(
+      (chat) =>
+        chat.type === "user" &&
+        (chat.other_user_id === c.id || chat.user_id === c.id)
+    );
 
+    if (existing) {
+      await fetch(`${API_URL}/seen/${existing.id}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      onSelectConversation(existing);
+      fetchChats(); // refresh
+      return;
+    }
+  }
+
+  // NORMAL USER CHAT
+  if (c.type === "user") {
+    await fetch(`${API_URL}/seen/${c.id}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    onSelectConversation(c);
+    fetchChats();
+    return;
+  }
+
+  // GROUP CHAT
+  onSelectConversation({ ...c, isGroup: true });
+  fetch(`${API_URL}/group_seen/${c.id}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  fetchChats();
+}}
 
                 className={`w-full p-4 flex items-start space-x-3 hover:bg-red-50 transition-colors cursor-pointer ${
                   isActive ? "bg-red-50" : ""
@@ -410,7 +489,7 @@ const timeAgoGroup = (dateString) => {
                 {/* Chat Info */}
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-gray-900 truncate text-[16px]">{name}</h3>
+                    <h3 className="font-medium text-gray-900 truncate text-[15px]">{name}</h3>
                     <div className="flex">
                       {
                       c.unread > 0 && (
@@ -495,15 +574,18 @@ const timeAgoGroup = (dateString) => {
 
                 {/* Unread or New chat */}
                 {!c.hasConversation && c.type !== "group" && (
+                  
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
                       createConversation(c.id);
+                      
                     }}
                     className="bg-white text-red-400 border text-[10px] cursor-pointer hover:bg-red-300 hover:text-white rounded-lg p-1 py-[2px] my-auto"
                     title="Start Conversation"
                   >
                     Connect <FontAwesomeIcon icon={faPlus} />
+              
                   </div>
                 )}
 

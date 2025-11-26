@@ -12,14 +12,14 @@ const ConfirmPopup = ({ show, message, onConfirm, onCancel }) => {
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 border border-gray-300 text-gray-700 py-1 rounded-lg hover:bg-gray-100"
+            className="flex-1 border border-gray-300 text-gray-700 py-1 rounded-lg hover:bg-gray-100 cursor-pointer"
           >
             Cancel
           </button>
 
           <button
             onClick={onConfirm}
-            className="flex-1 bg-[#f46c6c] text-white py-1 rounded-lg hover:bg-[#d85858]"
+            className="flex-1 bg-[#f46c6c] text-white py-1 rounded-lg hover:bg-[#d85858] cursor-pointer"
           >
             Yes
           </button>

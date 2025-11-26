@@ -16,6 +16,8 @@ const GroupChatInfo = ({ token, conversation, user }) => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
+  const storedSession = localStorage.getItem("session_id");
+
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -91,6 +93,7 @@ const addMemberToGroup = async (user_id) => {
       },
       body: JSON.stringify({
         group_id: conversation.id,
+        session_id: storedSession,
         user_id
       })
     });
@@ -127,6 +130,7 @@ const handleLeave  = async () => {
       },
       body: JSON.stringify({
         group_id: conversation.id,
+        session_id: storedSession,
         user_id: user.id, // OR user.id (depends on your props)
       }),
     });
@@ -151,7 +155,7 @@ const handleLeave  = async () => {
 
 
   return (
-    <div className="w-[45%] p-3 px-5 pt-10 text-center h-screen overflow-y-auto hide-scrollbar">
+    <div className="w-[45%] p-3 px-5 pt-10 text-center h-screen overflow-y-auto hide-scrollbar shadow-sm">
 
       {/* ✅ Group Avatar */}
       <div className="flex items-center justify-center">
@@ -222,7 +226,7 @@ const handleLeave  = async () => {
                 className="flex items-center gap-3 bg-gray-50 rounded-md p-2 hover:bg-gray-100 transition"
               >
                 <FontAwesomeIcon icon={faFileAlt} className="text-gray-500" />
-                <p className="text-xs font-semibold text-gray-700 truncate w-40">
+                <p className="text-xs font-medium text-gray-700 truncate w-40">
                   {file.file_url.split("/").pop()}
                 </p>
                 <button
@@ -311,7 +315,7 @@ const handleLeave  = async () => {
             ) : (
               <button
                 onClick={() => addMemberToGroup(u.id)}
-                className="text-xs px-2 py-1 bg-[#f46c6c] text-white rounded-md hover:bg-[#d85a5a] transition"
+                className="text-xs px-2 py-1 bg-[#f46c6c] text-white rounded-md hover:bg-[#d85a5a] transition cursor-pointer"
               >
                 Add
               </button>
@@ -322,7 +326,7 @@ const handleLeave  = async () => {
 
       <button
         onClick={() => setShowAddModal(false)}
-        className="w-full mt-3 text-sm text-gray-600 border border-gray-300 rounded-md py-1 hover:bg-gray-100"
+        className="w-full mt-3 text-sm text-gray-600 border border-gray-300 rounded-md py-1 hover:bg-gray-100 cursor-pointer"
       >
         Close
       </button>

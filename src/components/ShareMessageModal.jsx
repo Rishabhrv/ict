@@ -134,7 +134,7 @@ const ShareMessageModal = ({
         <button
           onClick={() => onShare(selectedUsers)}
           disabled={selectedUsers.length === 0}
-          className={`fixed bottom-10 left-[165px] bg-[#f37c7c] text-white p-3 rounded-full shadow-lg transition-all ${
+          className={`fixed bottom-10 left-[165px] bg-[#f37c7c] text-white p-3 rounded-full shadow-lg transition-all cursor-pointer ${
             selectedUsers.length === 0
               ? "opacity-50 cursor-not-allowed"
               : "hover:bg-[#ef6061]"

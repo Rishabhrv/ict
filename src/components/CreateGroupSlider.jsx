@@ -5,6 +5,7 @@ import {
   Users,
 } from "lucide-react";
 
+
 const API_URL = process.env.REACT_APP_API_URL;
 
 const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) => {
@@ -12,6 +13,7 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
   const [groupImage, setGroupImage] = useState(null);
   const [preview, setPreview] = useState(null);
   const [popupMsg, setPopupMsg] = useState("");
+  const storedSession = localStorage.getItem("session_id");
 
 
   const handleImageChange = (e) => {
@@ -32,6 +34,7 @@ const CreateGroupSlider = ({ isOpen, onClose, selectedUsers, onCreateGroup }) =>
   formData.append("group_name", groupName);
   if (groupImage) formData.append("group_image", groupImage);
   formData.append("members", JSON.stringify(selectedUsers.map((u) => u.id)));
+  formData.append("session_id", storedSession);
 
   try {
     const res = await fetch(`${API_URL}/create_group`, {
