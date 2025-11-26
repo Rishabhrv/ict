@@ -4,7 +4,24 @@ import { faFile, faImage, faPlus,faUserGroup } from "@fortawesome/free-solid-svg
 import {  Search, MessagesSquare, X   } from "lucide-react";
 import { createSocket } from "../socket";
 
+function getChatKey(c) {
+  if (c.type === "group") return `group-${c.id}`;
 
+  // If it has a conversation
+  if (c.id && c.other_user_id) return `convo-${c.id}`;
+
+  // Raw user (from search or all users)
+  return `user-${c.id}`;
+}
+
+  const uniqueById = (list) => {
+  const map = new Map();
+  list.forEach(item => {
+    const key = getChatKey(item);
+    if (!map.has(key)) map.set(key, item);
+  });
+  return [...map.values()];
+};
 const API_URL = process.env.REACT_APP_API_URL;
 
 const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate }) => {
@@ -18,6 +35,7 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const [popupMsg, setPopupMsg] = useState("");
   const storedSession = localStorage.getItem("session_id");
   
+
 
   
   // const [isSliderOpen, setIsSliderOpen] = useState(false);
@@ -55,8 +73,6 @@ const getTimeValue = (t) => {
   // Fallback
   return new Date(t).getTime();
 };
-
-
 
 
 
@@ -108,14 +124,8 @@ const fetchChats = React.useCallback(async () => {
     fetchChats();
   }, [fetchChats, lastMessageUpdate]);
 
-  const uniqueById = (list) => {
-    const map = new Map();
-    list.forEach(item => {
-      const key = item.type === "group" ? `g-${item.id}` : `u-${item.other_user_id || item.user_id || item.id}`;
-      if (!map.has(key)) map.set(key, item);
-    });
-    return [...map.values()];
-  };
+
+
 
   // ✅ Initialize socket
     useEffect(() => {
@@ -385,24 +395,17 @@ const timeAgoGroup = (dateString) => {
           listToShow.map((c) => {
             const name = c.type === "group" ? c.group_name : c.other_username || c.username;
             const avatarLetter = name ? name.charAt(0).toUpperCase() : "?";
-            const isActive =
-                  activeChat ===
-                  (c.type === "group"
-                    ? `group-${c.id}`
-                    : `user-${c.other_user_id || c.user_id || c.id}`);
+            const isActive = activeChat === getChatKey(c);
 
             return (
 
               <button
-                key={c.id || c.user_id}
+                key={getChatKey(c)}
 
                onClick={async () => {
   if (showAllUsers) return;
 
-  const identity =
-    c.type === "group"
-      ? `group-${c.id}`
-      : `user-${c.other_user_id || c.user_id || c.id}`;
+  const identity = getChatKey(c);
 
   setActiveChat(identity);
 
@@ -410,7 +413,7 @@ const timeAgoGroup = (dateString) => {
   setConvos((prev) =>
     prev.map((chat) => {
       if (chat.type === "group" && chat.id === c.id) return { ...chat, unread: 0 };
-      if (chat.type === "user" && chat.user_id === c.user_id) return { ...chat, unread: 0 };
+      if (getChatKey(chat) === getChatKey(c)) return { ...chat, unread: 0 };
       return chat;
     })
   );
