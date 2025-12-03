@@ -597,6 +597,74 @@ const sendMessage = async () => {
   if (!conversation) return;
   const s = getSocket();
 
+
+
+  // ✅ 2. Upload & send files if any selected
+ // ======================
+// 1️⃣ Upload & send *each file one by one*
+// ======================
+// ======================
+// 1️⃣ Upload & send each file individually
+// ======================
+if (pendingFiles.length > 0) {
+  for (const file of pendingFiles) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", user.username);
+
+    try {
+      const res = await fetch(`${API_URL}/upload_file`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      // 🔥 CASE 1 — backend returns { url: "..." }
+      if (data.url) {
+        s?.emit("send_message", {
+          token,
+          conversation_id: conversation.id,
+          message: data.url,
+          message_type: file.type.startsWith("image/") ? "image" : "file",
+          original_name: file.name,
+        });
+      }
+
+      // 🔥 CASE 2 — backend returns { uploads: [{ url, original_name }] }
+      else if (Array.isArray(data.uploads)) {
+        const uploadedFile = data.uploads[0];
+        s?.emit("send_message", {
+          token,
+          conversation_id: conversation.id,
+          message: uploadedFile.url,
+          message_type: file.type.startsWith("image/") ? "image" : "file",
+          original_name: uploadedFile.original_name || file.name,
+        });
+      }
+
+      // 🔥 CASE 3 — backend returns { urls: ["...", ...] }
+      else if (Array.isArray(data.urls)) {
+        s?.emit("send_message", {
+          token,
+          conversation_id: conversation.id,
+          message: data.urls[0],
+          message_type: file.type.startsWith("image/") ? "image" : "file",
+          original_name: file.name,
+        });
+      }
+
+    } catch (err) {
+      console.error("Upload error:", err);
+      showErrorPopup("Upload failed.");
+    }
+  }
+
+  setPendingFiles([]); // clear preview
+}
+
+
   // ✅ 1. Send text if exists
   if (input.trim()) {
     s?.emit("send_message", {
@@ -618,45 +686,6 @@ const sendMessage = async () => {
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "40px";
-    }
-  }
-
-  // ✅ 2. Upload & send files if any selected
-  if (pendingFiles.length > 0) {
-    const formData = new FormData();
-    pendingFiles.forEach((file) => formData.append("file", file));
-    formData.append("username", user.username);
-
-    try {
-      const res = await fetch(`${API_URL}/upload_file`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (res.ok && (data.urls || data.uploads)) {
-        const uploaded = data.uploads || data.urls.map((u, i) => ({
-          url: u,
-          original_name: pendingFiles[i]?.name,
-        }));
-
-        uploaded.forEach((item, i) => {
-          const file = pendingFiles[i];
-          s?.emit("send_message", {
-            token,
-            conversation_id: conversation.id,
-            message: item.url,
-            message_type: file.type.startsWith("image/") ? "image" : "file",
-            original_name: item.original_name,
-          });
-        });
-
-        setPendingFiles([]); // ✅ clear preview after sending
-      }
-    } catch (err) {
-      console.error("Upload error:", err);
-      showErrorPopup("Upload failed.");
     }
   }
 };
@@ -1067,10 +1096,6 @@ const handleBulkDeleteConfirmed = async () => {
                         toggleSelectMessage(msg.id);
                         return;
                       }
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      toggleSelectMessage(msg.id);
                     }}
                   >
 

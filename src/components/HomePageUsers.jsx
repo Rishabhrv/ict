@@ -17,10 +17,13 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
   const socketRef = useRef(null);
   const [popupMsg, setPopupMsg] = useState("");
   const storedSession = localStorage.getItem("session_id");
+  const activeChatRef = useRef(null);
   
 
   
   // const [isSliderOpen, setIsSliderOpen] = useState(false);
+
+  
 
 
 const normalizeChats = (items) =>
@@ -33,6 +36,11 @@ const normalizeChats = (items) =>
       i.created_at || 
       0
   }));
+
+
+  useEffect(() => {
+  activeChatRef.current = activeChat;
+}, [activeChat]);
 
 
 const getTimeValue = (t) => {
@@ -96,7 +104,13 @@ const fetchChats = React.useCallback(async () => {
 
 
 
-    setConvos(finalList);
+setConvos(prev => {
+  const oldActive = activeChatRef.current;
+  if (oldActive) setActiveChat(oldActive);
+  return finalList;
+});
+
+
 
   } catch (err) {
     console.error("Error fetching chats:", err);
@@ -295,6 +309,19 @@ function getChatKey(c) {
   return `user-${c.id}`;
 }
 
+useEffect(() => {
+  // ❌ Stop auto-refresh when searching or viewing all users
+  if (searchTerm.trim() || showAllUsers) return;
+
+  // ✅ Auto-refresh every 3 second
+  const interval = setInterval(() => {
+    fetchChats();
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [fetchChats, searchTerm, showAllUsers]);
+
+
 
   return (
     <div className="w-80 min-w-80 bg-white border-r border-gray-200 flex flex-col">
@@ -403,44 +430,66 @@ const isActive = activeChat === getChatKey(c);
                 key={getChatKey(c)}
 
                onClick={async () => {
-                if (showAllUsers) return;
+                if (showAllUsers && !searchTerm.trim()) {
+  // Only stop opening when in FULL USER LIST MODE (not search)
+  return;
+}
 
                 const identity = getChatKey(c);
 
   setActiveChat(identity);
 
   // RESET unread instantly
-  setConvos((prev) =>
-    prev.map((chat) => {
-      if (chat.type === "group" && chat.id === c.id) return { ...chat, unread: 0 };
-      if (chat.type === "user" && chat.user_id === c.user_id) return { ...chat, unread: 0 };
-      return chat;
-    })
-  );
+  // setConvos((prev) =>
+  //   prev.map((chat) => {
+  //     if (chat.type === "group" && chat.id === c.id) return { ...chat, unread: 0 };
+  //     if (chat.type === "user" && chat.user_id === c.user_id) return { ...chat, unread: 0 };
+  //     return chat;
+  //   })
+  // );
 
   // 🔥 If SEARCH RESULT user & no conversation → create it
   if (c.type === "user" && !c.hasConversation) {
-    await createConversation(c.id);
+    await onSelectConversation(null);
     return;
   }
 
         // 🔥 If SEARCH RESULT user & conversation exists → find it
-        if (c.type === "user" && c.hasConversation) {
-          const existing = convos.find(
-            (chat) => chat.type === "user" && chat.user_id === c.id
-          );
+        // 🔥 USER chat with existing conversation
+if (c.type === "user" && c.hasConversation) {
 
-    if (existing) {
-      await fetch(`${API_URL}/seen/${existing.id}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
-      });
+  // 🎯 If searching → match using other_user_id
+  const existingSearch = (searchTerm.trim() || showAllUsers)
+    ? convos.find(
+        (chat) =>
+          chat.type === "user" &&
+          chat.other_user_id === c.id
+      )
+    : null;
 
-      onSelectConversation(existing);
-      fetchChats(); // refresh
-      return;
-    }
+  // 🎯 Normal list → match using user_id
+  const existingNormal = (!searchTerm.trim() && !showAllUsers)
+    ? convos.find(
+        (chat) =>
+          chat.type === "user" &&
+          chat.user_id === c.id
+      )
+    : null;
+
+  // 🎯 Pick whichever is found
+  const existing = existingSearch || existingNormal;
+
+  if (existing) {
+    await fetch(`${API_URL}/seen/${existing.id}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    onSelectConversation(existing);
+    return;
   }
+}
+
 
   // NORMAL USER CHAT
   if (c.type === "user") {

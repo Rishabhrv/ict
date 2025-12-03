@@ -479,6 +479,13 @@ useEffect(() => {
     const s = socketRef.current;
     if (!s) return;
 
+    
+
+    // then upload files if any
+    if (pendingFiles.length > 0) {
+      await uploadAndSendFiles();
+    }
+
     // first send text if present (and possibly reply_to)
     if (input.trim()) {
       s.emit("send_group_message", {
@@ -490,11 +497,6 @@ useEffect(() => {
       });
       setInput("");
       setReplyingTo(null);
-    }
-
-    // then upload files if any
-    if (pendingFiles.length > 0) {
-      await uploadAndSendFiles();
     }
 
     if (textareaRef.current) {
@@ -1049,10 +1051,6 @@ const handleBulkDeleteConfirmed = async () => {
                       toggleSelectMessage(msg.id);
                       return;
                     }
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    toggleSelectMessage(msg.id);
                   }}
                 >
                   <div >
