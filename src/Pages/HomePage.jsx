@@ -24,8 +24,7 @@ const VALID_APPS = {
 };
 
 const VALID_ACCESS = {
-  // Loop buttons (table)
-   "ISBN": "manage_isbn_dialog",
+    "ISBN": "manage_isbn_dialog",
     "Payment": "manage_price_dialog",
     "Authors": "edit_author_dialog",
     "Operations": "edit_operation_dialog",
@@ -38,6 +37,7 @@ const VALID_ACCESS = {
     "Open Author Positions": "open_author_positions",
     "Pending Work": "pending_books",
     "IJISEM": "ijisem",
+    "Academic Guru": "academic_guru",
     "Tasks": "tasks",
     "Details": "details",
     "Message": "messages",
@@ -45,7 +45,7 @@ const VALID_ACCESS = {
     "Extra Books": "extra_books",
     "Add Book": "add_book_dialog",
     "Authors Edit": "edit_author_detail"
-};
+}
 
 
 
