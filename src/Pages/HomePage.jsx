@@ -43,6 +43,7 @@ const VALID_ACCESS = {
     "Message": "messages",
     "Attendance": "attendance",
     "Extra Books": "extra_books",
+    "Sales Tracking": "sales_track",
     "Add Book": "add_book_dialog",
     "Authors Edit": "edit_author_detail"
 }
