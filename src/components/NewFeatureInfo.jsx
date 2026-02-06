@@ -4,7 +4,7 @@ const NewFeatureInfo = ({ isOpen, onClose, user, token }) => {
   if (!isOpen) return null;
 
   const API_URL = process.env.REACT_APP_API_URL;
-  const popup_id = 3;
+  const popup_id = 4;
 
   const saveFeatureInfo = async () => {
     try {
