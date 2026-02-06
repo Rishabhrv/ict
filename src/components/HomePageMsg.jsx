@@ -584,7 +584,12 @@ useEffect(() => {
 
 
 
-
+const formatFileSize = (bytes) => {
+  if (!bytes) return "";
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(2) + " " + sizes[i];
+};
 
 
 
@@ -675,12 +680,7 @@ const sendMessage = async () => {
 
 
   // ✅ 2. Upload & send files if any selected
- // ======================
-// 1️⃣ Upload & send *each file one by one*
-// ======================
-// ======================
-// 1️⃣ Upload & send each file individually
-// ======================
+
 if (pendingFiles.length > 0) {
   setIsUploading(true);
   for (const file of pendingFiles) {
@@ -705,6 +705,7 @@ if (pendingFiles.length > 0) {
           message: data.url,
           message_type: file.type.startsWith("image/") ? "image" : "file",
           original_name: file.name,
+          file_size: file.size,
         });
       }
 
@@ -717,6 +718,7 @@ if (pendingFiles.length > 0) {
           message: uploadedFile.url,
           message_type: file.type.startsWith("image/") ? "image" : "file",
           original_name: uploadedFile.original_name || file.name,
+          file_size: file.size,
         });
       }
 
@@ -728,6 +730,7 @@ if (pendingFiles.length > 0) {
           message: data.urls[0],
           message_type: file.type.startsWith("image/") ? "image" : "file",
           original_name: file.name,
+          file_size: file.size,
         });
       }
 
@@ -1491,6 +1494,11 @@ const handleBulkDeleteConfirmed = async () => {
                               {/* Prefer clean name returned by backend */}
                               {fileOriginalName || cleanDisplayName(fileName)}
                             </p>
+                            {msg.file_size && (
+                              <p className="text-[10px] text-gray-500">
+                                {formatFileSize(msg.file_size)}
+                              </p>
+                            )}
                             <button
                               onClick={() => {
                                 const a = document.createElement("a");

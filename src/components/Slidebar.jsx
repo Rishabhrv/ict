@@ -11,7 +11,7 @@ import NewFeatureInfo from "../components/NewFeatureInfo";
 const Slidebar = ({ user,token }) => {
   const [isSliderOpen, setIsSliderOpen] = useState(false);
   const [showFeaturePopup, setShowFeaturePopup] = useState(false);
-  const popup_id = 1;
+  const popup_id = 4;
   const userInitials = user?.username ? user.username.slice(0, 2).toUpperCase() : "JD";
   const API_URL = process.env.REACT_APP_API_URL;
   const [popupChecked, setPopupChecked] = useState(false);

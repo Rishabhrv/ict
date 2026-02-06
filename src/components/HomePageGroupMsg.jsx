@@ -157,6 +157,7 @@ s.on("new_group_message", (msg) => {
     message: msg.message,
     message_type: msg.message_type || msg.type,
     timestamp: msg.timestamp,
+    file_size: msg.file_size || null,
     reply_to: msg.reply_to || null,
     reply_to_user: msg.reply_to_user || null,
     reply_to_text: msg.reply_to_text || null,
@@ -331,6 +332,7 @@ useEffect(() => {
         reply_to_user: m.reply_to_user ,
         message_type: m.message_type || m.type || (m.url ? "file" : "text"),
         timestamp: m.timestamp,
+        file_size: m.file_size || null,
         reply_to: m.reply_to || null,
         original_name: m.original_name || null,
 
@@ -417,6 +419,7 @@ const loadOlderMessages = async () => {
     reply_to: m.reply_to,
     reply_to_message: m.reply_to_message,
     original_name: m.original_name,
+    file_size: m.file_size || null,
   }));
 
  
@@ -524,6 +527,15 @@ const handleFileChange = (e) => {
 };
 
 
+const formatFileSize = (bytes) => {
+  if (!bytes) return "";
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(2) + " " + sizes[i];
+};
+
+
+
 
   // helper: upload files to server then emit group messages for each uploaded file
  const uploadAndSendFiles = async () => {
@@ -562,6 +574,7 @@ const handleFileChange = (e) => {
         group_id: GROUP_ID,
         message: u.url,
         message_type,
+        file_size: file.size,
       });
     });
 
@@ -1139,6 +1152,7 @@ const handleBulkDeleteConfirmed = async () => {
               original_name: rawMsg.original_name || rawMsg.name || null,
             
               // ✅ ADD THESE TWO LINES
+              file_size: rawMsg.file_size || null,
               reply_to: rawMsg.reply_to || null,
               reply_to_message: rawMsg.reply_to_message || null,
               reply_to_user: rawMsg.reply_to_user || null,
@@ -1402,6 +1416,11 @@ const handleBulkDeleteConfirmed = async () => {
                                     <p className="text-xs font-medium text-gray-800 w-44 break-words whitespace-normal">
                                       {fileName}
                                     </p>
+                                    {msg.file_size && (
+                                      <p className="text-[10px] text-gray-500">
+                                        {formatFileSize(msg.file_size)}
+                                      </p>
+                                    )}
                                     <button
                                       onClick={() => {
                                         const a = document.createElement("a");
