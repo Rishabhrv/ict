@@ -140,7 +140,7 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
               }
               setShowGroupSlider(true);
             }}
-            className="fixed bottom-10 left-40 bg-[#f37c7c] text-white mt-6 p-3 rounded-full hover:bg-[#ef6061] transition"
+            className="fixed bottom-10 left-40 bg-[#f37c7c] text-white mt-6 p-3 rounded-full hover:bg-[#ef6061] transition cursor-pointer"
           >
             <FontAwesomeIcon icon={faArrowRight} />
           </button>
@@ -175,7 +175,7 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
 
     <button
       onClick={() => setPopupMsg("")}
-      className="bg-[#f37c7c] text-white py-1 px-3 rounded-lg hover:bg-[#ef6061] w-30 mx-auto mt-2"
+      className="bg-[#f37c7c] text-white py-1 px-3 rounded-lg hover:bg-[#ef6061] w-30 mx-auto mt-2 cursor-pointer transition"
     >
       OK
     </button>

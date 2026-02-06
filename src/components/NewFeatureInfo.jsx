@@ -4,7 +4,7 @@ const NewFeatureInfo = ({ isOpen, onClose, user, token }) => {
   if (!isOpen) return null;
 
   const API_URL = process.env.REACT_APP_API_URL;
-  const popup_id = 1;
+  const popup_id = 3;
 
   const saveFeatureInfo = async () => {
     try {
@@ -37,11 +37,7 @@ const NewFeatureInfo = ({ isOpen, onClose, user, token }) => {
           <br /><br />
           <strong>Improved message formatting</strong> — your text now appears exactly as you type it.
           <br />
-          <strong>Multi-select actions</strong> — share or delete multiple messages in chats and groups with a simple right-click.
-          <br />
-          <strong>Enhanced file sharing</strong> — drag & drop, copy & paste (Ctrl+C / Ctrl+V), and send multiple files at once (up to 25MB each).
-          <br />
-          <strong>Smart notifications</strong> — receive instant alerts for new messages by enabling browser notifications.
+          <strong>Enhanced file sharing</strong> — drag & drop, copy & paste (Ctrl+C / Ctrl+V), and send up to <strong>10 files at once</strong>, with each file supporting sizes up to <strong>100MB</strong>.
         </p>
 
         <button

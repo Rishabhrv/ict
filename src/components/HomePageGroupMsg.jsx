@@ -1,5 +1,5 @@
 // HomePageGroupMsg.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback  } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBars,
@@ -28,6 +28,8 @@ import ConfirmPopup from "./ConfirmPopup";
 
 
 const API_URL = process.env.REACT_APP_API_URL;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILES = 10;
 
 const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   // --- UI states (kept same names / structure) ---
@@ -61,10 +63,13 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const [expandedWords, setExpandedWords] = useState({});
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState([]);
-  const [selectedShareUsers, setSelectedShareUsers] = useState([])
   const [popupMsg, setPopupMsg] = useState(""); // ✅ popup message state
   const [showPopup, setShowPopup] = useState(false); // ✅ visibility state
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showReactionInfo, setShowReactionInfo] = useState(false);
+  const [reactionInfo, setReactionInfo] = useState(null);
+  const [activeReactionTab, setActiveReactionTab] = useState("all");
     
   
   
@@ -84,6 +89,39 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const messageRefs = useRef({});
 
   const menuRef = useRef(null);
+
+const validateAndAddFiles = useCallback((files) => {
+  setPendingFiles((prev) => {
+    const remainingSlots = MAX_FILES - prev.length;
+
+    if (remainingSlots <= 0) {
+      showErrorPopup(`You can send maximum ${MAX_FILES} files ❌`);
+      return prev;
+    }
+
+    const validFiles = [];
+
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        showErrorPopup(`"${file.name}" exceeds 100MB ❌`);
+        continue;
+      }
+
+      if (validFiles.length < remainingSlots) {
+        validFiles.push(file);
+      }
+    }
+
+    if (files.length > remainingSlots) {
+      showErrorPopup(`Only ${MAX_FILES} files allowed at a time ❌`);
+    }
+
+    return [...prev, ...validFiles];
+  });
+}, []);
+
+
+
   
     useEffect(() => {
       function handleClickOutside(e) {
@@ -215,6 +253,40 @@ s.on("new_group_message", (msg) => {
   }
 };
 
+const sendShareMessageToGroup = async (groupIds) => {
+  if (!groupIds?.length || !messageToShare) return;
+
+  try {
+    const s = getSocket();
+
+    const msgs = Array.isArray(messageToShare)
+      ? messageToShare
+      : [messageToShare];
+
+    for (const targetGroupId of groupIds) {
+      for (const msg of msgs) {
+        s.emit("send_group_message", {
+          token,
+          group_id: targetGroupId,
+          message: msg.message,
+          message_type: msg.message_type,
+        });
+      }
+    }
+
+    // cleanup
+    setShowShareModal(false);
+    setMessageToShare(null);
+    exitMultiSelect();
+    showErrorPopup("Messages forwarded to group(s) ✅");
+
+  } catch (err) {
+    console.error(err);
+    showErrorPopup("Failed to forward to group ❌");
+  }
+};
+
+
 
 
 // Mark all existing messages as seen when opening the group
@@ -229,6 +301,14 @@ useEffect(() => {
 }, [conversation?.id, conversation?.isGroup, token]); 
 
 
+useEffect(() => {
+  if (!showReactionInfo) return;
+
+  const close = () => setShowReactionInfo(false);
+  window.addEventListener("click", close);
+
+  return () => window.removeEventListener("click", close);
+}, [showReactionInfo]);
 
 
 
@@ -388,22 +468,28 @@ useEffect(() => {
 
 
   // ----- drag & drop / paste handling -----
-  useEffect(() => {
-    const handlePaste = (e) => {
-      if (!e.clipboardData) return;
-      const items = e.clipboardData.items;
-      for (let it of items) {
-        if (it.kind === "file") {
-          const file = it.getAsFile();
-          if (file) {
-            setPendingFiles((prev) => [...prev, file]);
-          }
-        }
+useEffect(() => {
+  const handlePaste = (e) => {
+    if (!e.clipboardData) return;
+
+    const files = [];
+    for (const item of e.clipboardData.items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) files.push(file);
       }
-    };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
-  }, []);
+    }
+
+    if (files.length > 0) {
+      validateAndAddFiles(files);
+    }
+  };
+
+  window.addEventListener("paste", handlePaste);
+  return () => window.removeEventListener("paste", handlePaste);
+}, [validateAndAddFiles]); // ✅ ESLint happy
+
+
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -415,67 +501,83 @@ useEffect(() => {
     e.stopPropagation();
     setDragActive(false);
   };
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const files = Array.from(e.dataTransfer.files || []);
-    if (!files.length) return;
-    // limit max 5 files similar to your backend rules
-    const MAX = 5;
-    const toAdd = files.slice(0, MAX - pendingFiles.length);
-    setPendingFiles((prev) => [...prev, ...toAdd]);
-  };
 
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const MAX = 5;
-    const toAdd = files.slice(0, MAX - pendingFiles.length);
-    setPendingFiles((prev) => [...prev, ...toAdd]);
-    e.target.value = "";
-  };
+  const handleDrop = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setDragActive(false);
+
+  const files = Array.from(e.dataTransfer.files || []);
+  if (!files.length) return;
+
+  validateAndAddFiles(files);
+};
+
+
+
+const handleFileChange = (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+
+  validateAndAddFiles(files);
+  e.target.value = "";
+};
+
+
 
   // helper: upload files to server then emit group messages for each uploaded file
-  const uploadAndSendFiles = async () => {
-    if (!pendingFiles.length) return;
-    const formData = new FormData();
-    pendingFiles.forEach((f) => formData.append("file", f));
-    formData.append("username", user?.username || "guest");
+ const uploadAndSendFiles = async () => {
+  if (!pendingFiles.length) return;
 
-    try {
-      const resp = await fetch(`${API_URL}/upload_file`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        console.error("Upload failed:", data);
-        return;
-      }
-      const uploads = data.uploads || [];
-      const s = socketRef.current;
-      uploads.forEach((u, idx) => {
-        const file = pendingFiles[idx];
-        const url = u.url;
-        const message_type = file.type && file.type.startsWith("image/") ? "image" : "file";
-        // emit group socket event
-        s?.emit("send_group_message", {
-          token,
-          group_id: GROUP_ID,
-          message: url,
-          message_type,
-        });
-      });
-      setPendingFiles([]);
-    } catch (err) {
-      console.error("Upload error:", err);
+  setIsUploading(true); // 🔥 START LOADING
+
+  const formData = new FormData();
+  pendingFiles.forEach((f) => formData.append("file", f));
+  formData.append("username", user?.username || "guest");
+
+  try {
+    const resp = await fetch(`${API_URL}/upload_file`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      showErrorPopup("File upload failed ❌");
+      setIsUploading(false);
+      return;
     }
-  };
+
+    const uploads = data.uploads || [];
+    const s = socketRef.current;
+
+    uploads.forEach((u, idx) => {
+      const file = pendingFiles[idx];
+      const message_type =
+        file.type && file.type.startsWith("image/") ? "image" : "file";
+
+      s?.emit("send_group_message", {
+        token,
+        group_id: GROUP_ID,
+        message: u.url,
+        message_type,
+      });
+    });
+
+    setPendingFiles([]);
+  } catch (err) {
+    console.error("Upload error:", err);
+    showErrorPopup("Upload failed ❌");
+  }
+
+  setIsUploading(false); // ✅ END LOADING
+};
+
 
   // send text message (and handle pending files)
   const sendMessage = async () => {
+    if (isUploading) return;
     const s = socketRef.current;
     if (!s) return;
 
@@ -620,58 +722,58 @@ const getDayLabel = (timestamp) => {
   // click on share: open modal (or fallback prompt)
 
 
-  const sendShareMessage = async () => {
-    if (!selectedShareUsers.length || !messageToShare) return;
-  
-    const messagesToSend = Array.isArray(messageToShare)
-      ? messageToShare
-      : [messageToShare];
-  
-    try {
-      const s = getSocket();
-  
-      for (const targetUserId of selectedShareUsers) {
-        // Create/find conversation
-        const res = await fetch(`${API_URL}/createConversation`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            user1_id: user.id,
-            user2_id: targetUserId,
-          }),
+const sendShareMessage = async (usersToSend) => {
+  if (!usersToSend?.length || !messageToShare) return;
+
+  try {
+    const s = getSocket();
+
+    for (const targetUserId of usersToSend) {
+      const res = await fetch(`${API_URL}/createConversation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user1_id: user.id,
+          user2_id: targetUserId,
+          
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) continue;
+
+      const newConv = data.conversation;
+
+      const msgs = Array.isArray(messageToShare)
+        ? messageToShare
+        : [messageToShare];
+
+      for (const msg of msgs) {
+        s.emit("send_message", {
+          token,
+          conversation_id: newConv.id,
+          message: msg.message,
+          message_type: msg.message_type,
         });
-  
-        const data = await res.json();
-        if (!data.success) continue;
-  
-        const newConv = data.conversation;
-  
-        // Send each message
-        for (const msg of messagesToSend) {
-          s.emit("send_message", {
-            token,
-            conversation_id: newConv.id,
-            message: msg.message,
-            message_type: msg.message_type,
-          });
-        }
       }
-  
-      setShowShareModal(false);
-      setMessageToShare(null);
-      setSelectedShareUsers([]);
-      exitMultiSelect();
-  
-      showErrorPopup("Messages forwarded successfully! ✅");
-  
-    } catch (err) {
-      console.error(err);
-      showErrorPopup("Failed to forward message ❌");
     }
-  };
+
+    // ✅ cleanup
+    setShowShareModal(false);
+    setMessageToShare(null);
+    exitMultiSelect();
+
+    showErrorPopup("Messages forwarded successfully! ✅");
+
+  } catch (err) {
+    console.error(err);
+    showErrorPopup("Failed to forward message ❌");
+  }
+};
+
 
 
   const showErrorPopup = (message) => {
@@ -830,13 +932,21 @@ const formatMessage = (text) => {
   if (!text) return "";
 
   return text
-    .replace(/(\*)(.*?)\*/g, "<b>$2</b>")        // *bold*
-    .replace(/_(.*?)_/g, "<i>$1</i>")            // _italic_
-    .replace(/~(.*?)~/g, "<s>$1</s>")            // ~strike~
-    .replace(/`(.*?)`/g, "<code>$1</code>")      // `code`
-    .replace(/\n/g, "<br>");                     // new lines
-};
+    // ✅ Bold (*text* or **text**)
+    .replace(/(^|\s)\*{1,2}([^\s*][^*]*[^\s*])\*{1,2}(?=\s|$)/g, "$1<b>$2</b>")
 
+    // ✅ Italic (_text_)
+    .replace(/(^|\s)_([^\s_][^_]*[^\s_])_(?=\s|$)/g, "$1<i>$2</i>")
+
+    // ✅ Strikethrough (~text~)
+    .replace(/(^|\s)~([^\s~][^~]*[^\s~])~(?=\s|$)/g, "$1<s>$2</s>")
+
+    // ✅ Inline code
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+
+    // ✅ New lines
+    .replace(/\n/g, "<br>");
+};
 
 
 const applyFormat = (type) => {
@@ -854,13 +964,26 @@ const applyFormat = (type) => {
   if (type === "italic") wrapper = "_";
   if (type === "strike") wrapper = "~";
 
-  const formatted = wrapper + selected + wrapper;
+  const before = input[start - 1] || " ";
+  const after = input[end] || " ";
+
+  const needsSpaceBefore = !/\s/.test(before);
+  const needsSpaceAfter = !/\s/.test(after);
+
+  const formatted =
+    `${needsSpaceBefore ? " " : ""}${wrapper}${selected}${wrapper}${needsSpaceAfter ? " " : ""}`;
 
   const newText =
     input.slice(0, start) + formatted + input.slice(end);
 
   setInput(newText);
   setShowFormatBar(false);
+
+  // keep cursor position sane
+  setTimeout(() => {
+    textarea.selectionStart = textarea.selectionEnd =
+      start + formatted.length;
+  }, 0);
 };
 
 
@@ -1439,28 +1562,35 @@ const handleBulkDeleteConfirmed = async () => {
                       </div>
 
                         {/* reactions */}
-                        {reactions[msg.id] && reactions[msg.id].length > 0 && (() => {
-                          // ✅ Group reactions by emoji and count them
-                          const group = reactions[msg.id].reduce((acc, item) => {
-                            acc[item.emoji] = acc[item.emoji] || 0;
-                            acc[item.emoji] += 1;
-                            return acc;
-                          }, {});
-                        
-                          return (
-                            <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
-                              {Object.keys(group).map((emoji, i) => (
-                                <div
-                                  key={i}
-                                  className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
-                                >
-                                  <span>{emoji}</span>
-                                  <span className="text-xs text-gray-600">{group[emoji]}</span>
-                                </div>
-                              ))}
+                        {reactions[msg.id]?.length > 0 && (
+                          <div className={`flex mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReactionInfo({
+                                  message_id: msg.id,
+                                  reactions: reactions[msg.id],
+                                  anchorEl: e.currentTarget,
+                                  mine,
+                                });
+                                setActiveReactionTab("all");
+                                console.log("REACTIONS DATA 👉", reactions[msg.id]);
+                                setShowReactionInfo(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full
+                                         bg-white shadow-sm cursor-pointer"
+                            >
+                              <span>{reactions[msg.id][0].emoji}</span>
+                              <span className="text-xs text-gray-600 font-medium">
+                                {reactions[msg.id].length}
+                              </span>
                             </div>
-                          );
-                        })()}
+                          </div>
+                        )}
+
+                        
+
+
 
 
                         {/* time + optional seen icon (group doesn't track per-user seen here) */}
@@ -1667,9 +1797,40 @@ const handleBulkDeleteConfirmed = async () => {
           </div>
 
           <div className="flex items-center space-x-2">
-            <button onClick={sendMessage} className="w-12 h-12 bg-[#f37c7c] hover:bg-[#e46b6b] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer">
-              <Send className="w-5 h-5 text-white" />
-            </button>
+            <button
+  onClick={sendMessage}
+  disabled={isUploading}
+  className={`w-12 h-12 rounded-xl flex items-center justify-center transition
+    ${isUploading
+      ? "bg-gray-400 cursor-not-allowed"
+      : "bg-[#f37c7c] hover:bg-[#e46b6b] cursor-pointer"}
+  `}
+>
+  {isUploading ? (
+    <svg
+      className="animate-spin h-5 w-5 text-white"
+      viewBox="0 0 24 24"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
+  ) : (
+    <Send className="w-5 h-5 text-white" />
+  )}
+</button>
+
           </div>
         </div>
       </div>
@@ -1677,17 +1838,24 @@ const handleBulkDeleteConfirmed = async () => {
         
 
         {/* Share modal (uses your existing ShareMessageModal if available) */}
-        <ShareMessageModal
-        isOpen={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        token={token}
-        API_URL={API_URL}
-        currentUser={user}
-        onShare={(selectedUserIds) => {
-          setSelectedShareUsers(selectedUserIds);
-          sendShareMessage(); // or handle your logic here
-        }}
-      />
+       <ShareMessageModal
+  isOpen={showShareModal}
+  onClose={() => setShowShareModal(false)}
+  token={token}
+  API_URL={API_URL}
+  currentUser={user}
+
+  // 👇 USER → USER
+  onShare={(selectedUserIds) => {
+    sendShareMessage(selectedUserIds);
+  }}
+
+  // 👇 GROUP → GROUP (THIS WAS MISSING)
+  onShareGroup={(selectedGroupIds) => {
+    sendShareMessageToGroup(selectedGroupIds);
+  }}
+/>
+
 
         {/* Message Info modal */}
         {selectedMsgInfo && (
@@ -1821,6 +1989,98 @@ const handleBulkDeleteConfirmed = async () => {
           />
         </div>
       )}
+{showReactionInfo && reactionInfo?.anchorEl && (
+  (() => {
+    const rect = reactionInfo.anchorEl.getBoundingClientRect();
+    const POPUP_WIDTH = 280;
+    const GAP = 10;
+
+    const top = rect.top + window.scrollY - 10;
+
+    // 👉 WhatsApp logic
+    const left = reactionInfo.mine
+      ? rect.left + window.scrollX - POPUP_WIDTH - GAP   // 👈 MY MESSAGE → LEFT
+      : rect.right + window.scrollX + GAP;               // 👉 OTHER → RIGHT
+
+    return (
+      <div
+        className="fixed z-50 bg-white rounded-xl shadow-xl w-[280px]"
+        style={{ top, left }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200">
+          {["all", ...new Set(reactionInfo.reactions.map(r => r.emoji))].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveReactionTab(tab)}
+              className={`flex-1 py-2 text-sm font-medium cursor-pointer
+                ${activeReactionTab === tab
+                  ? "border-b-2 border-[#25D366] text-[#25D366]"
+                  : "text-gray-500"}
+              `}
+            >
+              {tab === "all" ? "All" : tab}
+            </button>
+          ))}
+        </div>
+
+        {/* User list */}
+        <div className="max-h-[300px] overflow-y-auto p-3">
+          {reactionInfo.reactions
+            .filter(r => activeReactionTab === "all" || r.emoji === activeReactionTab)
+            .map((r, i) => {
+              const isMe = r.user_id === user.id;
+
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-between py-2 border-b last:border-0 border-gray-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                      {(r.username || r.sender_name || r.user || "?")[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {isMe
+                          ? "You"
+                          : r.username || r.sender_name || r.user || "Unknown"}
+                      </p>
+
+                      {isMe && (
+                        <p
+                          className="text-xs text-gray-400 cursor-pointer"
+                          onClick={() => {
+                            handleAddReaction(reactionInfo.message_id, r.emoji);
+                            setShowReactionInfo(false);
+                          }}
+                        >
+                          Click to remove
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="text-lg">{r.emoji}</span>
+                </div>
+              );
+            })}
+        </div>
+
+        {/* Close */}
+        <button
+          onClick={() => setShowReactionInfo(false)}
+          className="absolute top-2 right-3 text-gray-500 text-lg cursor-pointer hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+    );
+  })()
+)}
+
+
 
     </div>
   );
