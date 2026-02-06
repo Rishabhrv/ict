@@ -271,6 +271,7 @@ const sendShareMessageToGroup = async (groupIds) => {
           group_id: targetGroupId,
           message: msg.message,
           message_type: msg.message_type,
+          file_size: msg.file_size || null,
         });
       }
     }
@@ -770,6 +771,7 @@ const sendShareMessage = async (usersToSend) => {
           conversation_id: newConv.id,
           message: msg.message,
           message_type: msg.message_type,
+          file_size: msg.file_size || null,
         });
       }
     }
