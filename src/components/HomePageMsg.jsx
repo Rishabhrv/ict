@@ -1,5 +1,5 @@
 // src/components/HomePageMsg.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBars,
@@ -33,6 +33,9 @@ import ShareMessageModal from "./ShareMessageModal";
 import ImageIcon from "../components/Images/1f4ac.png";
 import ConfirmPopup from "./ConfirmPopup";
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILES = 10;
+
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -49,7 +52,6 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [messageToShare, setMessageToShare] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null);
-  const [selectedShareUsers, setSelectedShareUsers] = useState([])
   const textareaRef = useRef(null);
   const [reactions, setReactions] = useState({});
   const [selectedMsgInfo, setSelectedMsgInfo] = useState(null);
@@ -74,6 +76,7 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState([]);
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
 
 
@@ -120,10 +123,8 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage }) => {
   }
 };
 
-
-
-const sendShareMessage = async () => {
-  if (!selectedShareUsers.length || !messageToShare) return;
+const sendShareMessageToGroup = async (groupIds) => {
+  if (!groupIds?.length || !messageToShare) return;
 
   const messagesToSend = Array.isArray(messageToShare)
     ? messageToShare
@@ -132,8 +133,42 @@ const sendShareMessage = async () => {
   try {
     const s = getSocket();
 
-    for (const targetUserId of selectedShareUsers) {
-      // Create/find conversation
+    for (const groupId of groupIds) {
+      for (const msg of messagesToSend) {
+        s.emit("send_group_message", {
+          token,
+          group_id: groupId,
+          message: msg.message,
+          message_type: msg.message_type,
+        });
+      }
+    }
+
+    // cleanup
+    setShowShareModal(false);
+    setMessageToShare(null);
+    exitMultiSelect();
+    showErrorPopup("Messages forwarded to group(s) ✅");
+
+  } catch (err) {
+    console.error(err);
+    showErrorPopup("Failed to forward message to group ❌");
+  }
+};
+
+
+
+const sendShareMessage = async (usersToSend) => {
+  if (!usersToSend?.length || !messageToShare) return;
+
+  const messagesToSend = Array.isArray(messageToShare)
+    ? messageToShare
+    : [messageToShare];
+
+  try {
+    const s = getSocket();
+
+    for (const targetUserId of usersToSend) {
       const res = await fetch(`${API_URL}/createConversation`, {
         method: "POST",
         headers: {
@@ -151,7 +186,6 @@ const sendShareMessage = async () => {
 
       const newConv = data.conversation;
 
-      // Send each message
       for (const msg of messagesToSend) {
         s.emit("send_message", {
           token,
@@ -162,11 +196,10 @@ const sendShareMessage = async () => {
       }
     }
 
+    // cleanup
     setShowShareModal(false);
     setMessageToShare(null);
-    setSelectedShareUsers([]);
     exitMultiSelect();
-
     showErrorPopup("Messages forwarded successfully! ✅");
 
   } catch (err) {
@@ -174,6 +207,7 @@ const sendShareMessage = async () => {
     showErrorPopup("Failed to forward message ❌");
   }
 };
+
 
 
 
@@ -363,18 +397,30 @@ const handleFileChange = (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
 
-
-    if (files.length > 5) {
-    showErrorPopup("You can only send 5 files at a time!");
-    return;
+  // 🔥 Check each file size
+  for (const file of files) {
+    if (file.size > MAX_FILE_SIZE) {
+      showErrorPopup("File size exceeded! Max allowed is 100MB ❌");
+      e.target.value = ""; // reset input
+      return;
+    }
   }
 
-  if (pendingFiles.length + files.length > 5) {
-    showErrorPopup("Maximum 5 files allowed at a time!");
-    return;
-  }
-  setPendingFiles((prev) => [...prev, ...files]); // ✅ Save files to preview them
+  // ✅ Max 10 files rule
+if (files.length > MAX_FILES) {
+  showErrorPopup(`You can only send ${MAX_FILES} files at a time!`);
+  return;
+}
+
+if (pendingFiles.length + files.length > MAX_FILES) {
+  showErrorPopup(`Maximum ${MAX_FILES} files allowed at a time!`);
+  return;
+}
+
+
+  setPendingFiles((prev) => [...prev, ...files]);
 };
+
 
 const handleDragOver = (e) => {
   e.preventDefault();
@@ -396,9 +442,24 @@ const handleDrop = (e) => {
   const files = Array.from(e.dataTransfer.files);
   if (!files.length) return;
 
+  for (const file of files) {
+    if (file.size > MAX_FILE_SIZE) {
+      showErrorPopup("File size exceeded! Max allowed is 100MB ❌");
+      return;
+    }
+  }
+
   const validFiles = files.filter((file) => file instanceof File);
-  setPendingFiles((prev) => [...prev, ...validFiles]); // ✅ same structure as your file picker & paste
+  
+  if (pendingFiles.length + validFiles.length > MAX_FILES) {
+    showErrorPopup(`Maximum ${MAX_FILES} files allowed at a time!`);
+    return;
+  }
+  
+  setPendingFiles((prev) => [...prev, ...validFiles]);
+
 };
+
 
 
 
@@ -483,6 +544,23 @@ useEffect(() => {
     });
   };
 
+const handlePastedFile = useCallback((file) => {
+  if (!(file instanceof Blob || file instanceof File)) return;
+
+  if (file.size > MAX_FILE_SIZE) {
+    showErrorPopup("File size exceeded! Max allowed is 100MB ❌");
+    return;
+  }
+
+  setPendingFiles((prev) => {
+    if (prev.length + 1 > MAX_FILES) {
+      showErrorPopup(`Maximum ${MAX_FILES} files allowed at a time!`);
+      return prev; // ❌ block adding
+    }
+    return [...prev, file]; // ✅ safe add
+  });
+}, []);
+
 
 useEffect(() => {
   const handlePaste = (event) => {
@@ -501,17 +579,13 @@ useEffect(() => {
 
   window.addEventListener("paste", handlePaste);
   return () => window.removeEventListener("paste", handlePaste);
-}, []);
+}, [handlePastedFile]); // ✅ warning gone
 
 
-const handlePastedFile = (file) => {
-  if (!(file instanceof Blob || file instanceof File)) {
-    console.error("Not a valid file:", file);
-    return;
-  }
 
-  setPendingFiles((prev) => [...prev, file]); // ✅ Store only File object
-};
+
+
+
 
 
 
@@ -595,6 +669,7 @@ useEffect(() => {
   // ✅ Send message
 const sendMessage = async () => {
   if (!conversation) return;
+  if (isUploading) return;
   const s = getSocket();
 
 
@@ -607,6 +682,7 @@ const sendMessage = async () => {
 // 1️⃣ Upload & send each file individually
 // ======================
 if (pendingFiles.length > 0) {
+  setIsUploading(true);
   for (const file of pendingFiles) {
     const formData = new FormData();
     formData.append("file", file);
@@ -662,6 +738,7 @@ if (pendingFiles.length > 0) {
   }
 
   setPendingFiles([]); // clear preview
+  setIsUploading(false);
 }
 
 
@@ -754,16 +831,35 @@ const handleTextSelection = () => {
 };
 
 
+
+
+
+
 const formatMessage = (text) => {
   if (!text) return "";
 
   return text
-    .replace(/(\*)(.*?)\*/g, "<b>$2</b>")        // *bold*
-    .replace(/_(.*?)_/g, "<i>$1</i>")            // _italic_
-    .replace(/~(.*?)~/g, "<s>$1</s>")            // ~strike~
-    .replace(/`(.*?)`/g, "<code>$1</code>")      // `code`
-    .replace(/\n/g, "<br>");                     // new lines
+    // ✅ Bold (*text* or **text**)
+    .replace(/(^|\s)\*{1,2}([^\s*][^*]*[^\s*])\*{1,2}(?=\s|$)/g, "$1<b>$2</b>")
+
+    // ✅ Italic (_text_)
+    .replace(/(^|\s)_([^\s_][^_]*[^\s_])_(?=\s|$)/g, "$1<i>$2</i>")
+
+    // ✅ Strikethrough (~text~)
+    .replace(/(^|\s)~([^\s~][^~]*[^\s~])~(?=\s|$)/g, "$1<s>$2</s>")
+
+    // ✅ Inline code
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+
+    // ✅ New lines
+    .replace(/\n/g, "<br>");
+
+    
 };
+
+
+
+
 
 
 
@@ -782,14 +878,28 @@ const applyFormat = (type) => {
   if (type === "italic") wrapper = "_";
   if (type === "strike") wrapper = "~";
 
-  const formatted = wrapper + selected + wrapper;
+  const before = input[start - 1] || " ";
+  const after = input[end] || " ";
+
+  const needsSpaceBefore = !/\s/.test(before);
+  const needsSpaceAfter = !/\s/.test(after);
+
+  const formatted =
+    `${needsSpaceBefore ? " " : ""}${wrapper}${selected}${wrapper}${needsSpaceAfter ? " " : ""}`;
 
   const newText =
     input.slice(0, start) + formatted + input.slice(end);
 
   setInput(newText);
   setShowFormatBar(false);
+
+  // keep cursor position sane
+  setTimeout(() => {
+    textarea.selectionStart = textarea.selectionEnd =
+      start + formatted.length;
+  }, 0);
 };
+
 
 
 
@@ -1917,10 +2027,38 @@ const handleBulkDeleteConfirmed = async () => {
             <div className="flex items-center space-x-2">
               <button
                 onClick={sendMessage}
-                className="w-12 h-12 bg-[#f37c7c] hover:bg-[#e46b6b] rounded-xl flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer"
+                disabled={isUploading}
+                className={`w-12 h-12 rounded-xl flex items-center justify-center transition
+                  ${isUploading
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#f37c7c] hover:bg-[#e46b6b] cursor-pointer"}
+                `}
               >
-                <Send className="w-5 h-5 text-white" />
+                {isUploading ? (
+                  <svg
+                    className="animate-spin h-5 w-5 text-white"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                    />
+                  </svg>
+                ) : (
+                  <Send className="w-5 h-5 text-white" />
+                )}
               </button>
+
             </div>
           </div>
               </div>
@@ -1943,10 +2081,11 @@ const handleBulkDeleteConfirmed = async () => {
         API_URL={API_URL}
         currentUser={user}
         onShare={(selectedUserIds) => {
-          setSelectedShareUsers(selectedUserIds);
-          sendShareMessage(); // or handle your logic here
+          sendShareMessage(selectedUserIds); // ✅ DIRECT
         }}
+        onShareGroup={sendShareMessageToGroup}
       />
+
       <ConfirmPopup
         show={showConfirm}
         message={bulkDeleteMode ? "Delete selected messages?" : "Delete this message?"}

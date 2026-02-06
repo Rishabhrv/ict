@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowRight } from "@fortawesome/free-solid-svg-icons";
+import { faArrowRight, faUsers } from "@fortawesome/free-solid-svg-icons";
 
 const ShareMessageModal = ({
   isOpen,
@@ -9,135 +9,168 @@ const ShareMessageModal = ({
   API_URL,
   currentUser,
   onShare,
+  onShareGroup,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [allUsers, setAllUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [recent, setRecent] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [selected, setSelected] = useState([]);
 
-  // 🔹 Fetch all users
+  // ✅ STABLE safeFetch
+  const safeFetch = useCallback(
+    async (url) => {
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const text = await res.text();
+
+        if (!res.ok) {
+          console.error("API error:", url, text);
+          return [];
+        }
+
+        try {
+          return JSON.parse(text);
+        } catch {
+          console.error("Not JSON from:", url, text);
+          return [];
+        }
+      } catch (err) {
+        console.error("Fetch failed:", url, err);
+        return [];
+      }
+    },
+    [token]
+  );
+
+  // 🔹 Fetch RECENT + USERS + GROUPS
   useEffect(() => {
     if (!isOpen) return;
 
-    fetch(`${API_URL}/all_users`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        const users = Array.isArray(data) ? data : [];
-        const others = users.filter((u) => u.id !== currentUser.id);
-        setAllUsers(others);
-        setFilteredUsers(others);
-      })
-      .catch((err) => console.error("Error fetching users:", err));
-  }, [isOpen, API_URL, token, currentUser]);
+    Promise.all([
+      safeFetch(`${API_URL}/recent_chats`),
+      safeFetch(`${API_URL}/groups`),
+      safeFetch(`${API_URL}/all_users`),
+    ]).then(([recentChats, groupList, userList]) => {
+      // RECENT
+      const recentItems = (Array.isArray(recentChats) ? recentChats : []).map(
+        (r) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+        })
+      );
 
-  // 🔹 Filter users
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredUsers(allUsers);
-      return;
-    }
-    const term = searchTerm.toLowerCase();
-    setFilteredUsers(
-      allUsers.filter(
-        (u) =>
-          u.username?.toLowerCase().includes(term) ||
-          u.email?.toLowerCase().includes(term)
-      )
-    );
-  }, [searchTerm, allUsers]);
+      const recentKeys = new Set(
+        recentItems.map((i) => `${i.type}-${i.id}`)
+      );
 
-  // 🔹 Select or deselect user
-  const toggleUser = (userId) => {
-    setSelectedUsers((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
+      // GROUPS
+      const groupItems = (Array.isArray(groupList) ? groupList : [])
+        .map((g) => ({
+          id: g.id,
+          name: g.group_name || g.name,
+          type: "group",
+        }))
+        .filter((g) => !recentKeys.has(`group-${g.id}`));
+
+      // USERS
+      const userItems = (Array.isArray(userList) ? userList : [])
+        .filter((u) => u.id !== currentUser.id)
+        .map((u) => ({
+          id: u.id,
+          name: u.username,
+          type: "user",
+        }))
+        .filter((u) => !recentKeys.has(`user-${u.id}`));
+
+      setRecent(recentItems);
+      setGroups(groupItems);
+      setUsers(userItems);
+    });
+  }, [isOpen, API_URL, currentUser.id, safeFetch]);
+
+  // 🔹 Selection toggle
+  const toggleSelect = (item) => {
+    setSelected((prev) =>
+      prev.some((p) => p.id === item.id && p.type === item.type)
+        ? prev.filter((p) => !(p.id === item.id && p.type === item.type))
+        : [...prev, item]
     );
   };
+
+  // 🔹 Share
+  const handleShare = () => {
+    const userIds = selected.filter((i) => i.type === "user").map((i) => i.id);
+    const groupIds = selected.filter((i) => i.type === "group").map((i) => i.id);
+
+    if (userIds.length) onShare(userIds);
+    if (groupIds.length) onShareGroup(groupIds);
+
+    setSelected([]);
+    onClose();
+  };
+
+  const filterBySearch = (list) =>
+    list.filter((i) =>
+      i.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
   if (!isOpen) return null;
 
   return (
     <>
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 bg-black/40 z-40"
-        onClick={onClose}
-      ></div>
+      <div className="fixed inset-0  z-40" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="fixed top-0 left-0 h-full w-[370px] bg-white shadow-lg z-50 transform transition-transform duration-300 ease-in-out">
-        {/* Header */}
+      <div className="fixed top-0 left-0 h-full w-100 bg-white shadow-lg z-50">
         <div className="flex justify-between items-center p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-700">Share Message</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-xl"
-          >
+          <h2 className="text-lg font-semibold">Share Message</h2>
+          <button onClick={onClose} className="text-xl cursor-pointer">
             ✕
           </button>
         </div>
 
-        {/* Search Bar */}
-        <div className="p-3 border-b border-gray-100">
+        <div className="p-3 border-b border-gray-200">
           <input
             type="text"
-            placeholder="Search by Name"
+            placeholder="Search"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-gray-100 rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f37c7c]"
+            className="w-full bg-gray-100 rounded-full px-3 py-2 text-sm"
           />
         </div>
 
-        {/* Users List */}
-        <div className="overflow-y-auto max-h-[75vh] tiny-scrollbar p-3">
-          {filteredUsers.length > 0 ? (
-            filteredUsers.map((user) => {
-              const initials = user.username
-                ? user.username.slice(0, 2).toUpperCase()
-                : "U";
-              const isSelected = selectedUsers.includes(user.id);
+        <div className="overflow-y-auto max-h-[75vh] p-3">
+          {filterBySearch(recent).length > 0 && (
+            <>
+              <p className="text-xs text-gray-500 mb-2">Recent</p>
+              {filterBySearch(recent).map(renderItem)}
+            </>
+          )}
 
-              return (
-                <div
-                  key={user.id}
-                  onClick={() => toggleUser(user.id)}
-                  className={`flex items-center px-3 py-2 rounded-lg cursor-pointer mb-1 transition ${
-                    isSelected ? "bg-[#f37c7c]/10" : "hover:bg-gray-50"
-                  }`}
-                >
-                  <div
-                    className={`w-10 h-10 flex items-center justify-center rounded-full text-white font-semibold text-sm mr-3 ${
-                      isSelected
-                        ? "bg-[#f37c7c]"
-                        : "bg-[#f37c7c]/80 text-white"
-                    }`}
-                  >
-                    {initials}
-                  </div>
-                  <div className="text-gray-700 text-sm font-medium">
-                    {user.username}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-center text-gray-400 text-sm mt-4">
-              No users found
-            </p>
+          {filterBySearch(groups).length > 0 && (
+            <>
+              <p className="text-xs text-gray-500 mt-4 mb-2">Groups</p>
+              {filterBySearch(groups).map(renderItem)}
+            </>
+          )}
+
+          {filterBySearch(users).length > 0 && (
+            <>
+              <p className="text-xs text-gray-500 mt-4 mb-2">Contacts</p>
+              {filterBySearch(users).map(renderItem)}
+            </>
           )}
         </div>
 
-        {/* Floating Share Button */}
         <button
-          onClick={() => onShare(selectedUsers)}
-          disabled={selectedUsers.length === 0}
-          className={`fixed bottom-10 left-[165px] bg-[#f37c7c] text-white p-3 rounded-full shadow-lg transition-all cursor-pointer ${
-            selectedUsers.length === 0
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-[#ef6061]"
+          onClick={handleShare}
+          disabled={!selected.length}
+          className={`fixed bottom-10 left-[165px] bg-[#f37c7c] text-white p-3 rounded-full shadow-lg cursor-pointer ${
+            !selected.length ? "opacity-50" : "hover:bg-[#ef6061]"
           }`}
         >
           <FontAwesomeIcon icon={faArrowRight} />
@@ -145,6 +178,36 @@ const ShareMessageModal = ({
       </div>
     </>
   );
+
+  function renderItem(item) {
+    const isSelected = selected.some(
+      (s) => s.id === item.id && s.type === item.type
+    );
+
+    const initials =
+      item.type === "group"
+        ? <FontAwesomeIcon icon={faUsers} className="text-gray-500"/>
+        : item.name.slice(0, 2).toUpperCase();
+
+    return (
+      <div
+        key={`${item.type}-${item.id}`}
+        onClick={() => toggleSelect(item)}
+        className={`flex items-center px-3 py-2 rounded-lg cursor-pointer mb-1 ${
+          isSelected ? "bg-[#f37c7c]/10" : "hover:bg-gray-50"
+        }`}
+      >
+        <div
+          className={`w-10 h-10 flex items-center justify-center rounded-full text-white text-xs mr-3 ${
+            item.type === "group" ? "bg-gray-200" : "bg-[#f37c7c]"
+          }`}
+        >
+          {initials}
+        </div>
+        <span className="text-sm font-medium">{item.name}</span>
+      </div>
+    );
+  }
 };
 
 export default ShareMessageModal;
