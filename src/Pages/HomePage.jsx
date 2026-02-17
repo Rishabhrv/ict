@@ -45,6 +45,7 @@ const VALID_ACCESS = {
     "Extra Books": "extra_books",
     "Sales Tracking": "sales_track",
     "Add Book": "add_book_dialog",
+    "Pending Checklist": "pending_checklist_dialog",
     "Authors Edit": "edit_author_detail"
 }
 
