@@ -44,6 +44,7 @@ const VALID_ACCESS = {
     "Attendance": "attendance",
     "Extra Books": "extra_books",
     "Sales Tracking": "sales_track",
+    "Activity Summary": "activity_summary_dialog",
     "Add Book": "add_book_dialog",
     "Pending Checklist": "pending_checklist_dialog",
     "Authors Edit": "edit_author_detail"
