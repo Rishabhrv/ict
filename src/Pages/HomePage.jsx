@@ -34,6 +34,7 @@ const VALID_ACCESS = {
     "Team Dashboard": "team_dashboard",
     "Print Management": "print_management",
     "Inventory": "inventory",
+    "Listings": "online_listings",
     "Open Author Positions": "open_author_positions",
     "Pending Work": "pending_books",
     "IJISEM": "ijisem",
