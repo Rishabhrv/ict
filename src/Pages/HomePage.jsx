@@ -21,6 +21,7 @@ const VALID_APPS = {
   Tasks: "tasks",
   Sales: "sales",
   Clone: "clone",
+  Home: "home",
 };
 
 const VALID_ACCESS = {
