@@ -24,7 +24,7 @@ const VALID_APPS = {
 };
 
 const VALID_ACCESS = {
-    "ISBN": "manage_isbn_dialog",
+   "ISBN": "manage_isbn_dialog",
     "Payment": "manage_price_dialog",
     "Authors": "edit_author_dialog",
     "Operations": "edit_operation_dialog",
@@ -33,8 +33,11 @@ const VALID_ACCESS = {
     "Advance Search": "advance_search",
     "Team Dashboard": "team_dashboard",
     "Print Management": "print_management",
+    "Manage Delivery": "delivery_management",
     "Inventory": "inventory",
     "Listings": "online_listings",
+    "File Management": "file_management",
+    "Social Coverage": "social_coverage",
     "Open Author Positions": "open_author_positions",
     "Pending Work": "pending_books",
     "IJISEM": "ijisem",
