@@ -67,8 +67,6 @@ const getTimeValue = (t) => {
 
 
 
-
-
 const fetchChats = React.useCallback(async () => {
   try {
     const [convoRes, groupRes] = await Promise.all([
@@ -86,31 +84,30 @@ const fetchChats = React.useCallback(async () => {
     const groups = safeGroups.map(g => ({ ...g, type: "group", hasConversation: true }));
 
     const merged = [...userChats, ...groups];
-
-
-    // 🔥 NORMALIZE
     const normalized = normalizeChats(merged);
-
-
-    // 🔥 SORT
     const sorted = normalized.sort(
       (a, b) => getTimeValue(b.sort_time) - getTimeValue(a.sort_time)
     );
-
-
-
-    // 🔥 UNIQUE BY ID
     const finalList = uniqueById(sorted);
+    // ✅ NEW: Join socket rooms for ALL fetched conversations
+    const s = socketRef.current;
+    if (s) {
+      finalList.forEach(chat => {
+        if (chat.type === "group") {
+          s.emit("join_group", { token, group_id: chat.id });
+        } else if (chat.hasConversation && chat.id) {
+          s.emit("join", { token, conversation_id: chat.id });
+        }
+      });
+    }
 
+    setConvos(prev => {
+      const oldActive = activeChatRef.current;
+      if (oldActive) setActiveChat(oldActive);
+      return finalList;
+    });
 
-
-setConvos(prev => {
-  const oldActive = activeChatRef.current;
-  if (oldActive) setActiveChat(oldActive);
-  return finalList;
-});
-
-
+    
 
   } catch (err) {
     console.error("Error fetching chats:", err);
@@ -309,17 +306,32 @@ function getChatKey(c) {
   return `user-${c.id}`;
 }
 
-useEffect(() => {
-  // ❌ Stop auto-refresh when searching or viewing all users
-  if (searchTerm.trim() || showAllUsers) return;
+// ✅ Initialize socket
+  useEffect(() => {
+    if (!token) return;
+    const s = createSocket(token);
+    socketRef.current = s;
 
-  // ✅ Auto-refresh every 3 second
-  const interval = setInterval(() => {
-    fetchChats();
-  }, 3000);
+    // ⭐ Define the exact function to handle updates
+    const handleUpdate = () => fetchChats();
 
-  return () => clearInterval(interval);
-}, [fetchChats, searchTerm, showAllUsers]);
+    s.on("connect", handleUpdate);
+    s.on("new_message", handleUpdate);
+    s.on("new_group_message", handleUpdate);
+    s.on("message_seen", handleUpdate);
+    s.on("messages_marked_seen", handleUpdate);
+    s.on("group_messages_marked_seen", handleUpdate); // ⭐ Listen for the new group seen event
+
+    return () => {
+      // ⭐ Pass the named function to off() so we don't wipe out other components' listeners
+      s.off("connect", handleUpdate);
+      s.off("new_message", handleUpdate);
+      s.off("new_group_message", handleUpdate);
+      s.off("message_seen", handleUpdate);
+      s.off("messages_marked_seen", handleUpdate);
+      s.off("group_messages_marked_seen", handleUpdate);
+    };
+  }, [token, fetchChats]);
 
 
 

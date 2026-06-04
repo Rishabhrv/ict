@@ -62,23 +62,17 @@ const ClonePage = () => {
   }, []);
 
   // ✅ Button click handler with click_id generation
-  const goToChatApp = () => {
+const goToChatApp = () => {
+  let clickId = generateUUID();
+  let sessionId = generateUUID();
 
-    // let storedclick = localStorage.getItem("click_id");
-    // if (!storedclick) {
-    //   storedclick = generateUUID();
-    //   localStorage.setItem("click_id", storedclick);
-    // }
-    // setClickId(storedclick);
+  // ✅ Decide route based on role
+  const basePath = user?.role === "admin" ? "/admin" : "/";
 
-    let clickId = generateUUID();
-    let sessionId = generateUUID();
-
-    
-
-    const redirectUrl = `http://localhost:3000/?token=${token}&session_id=${sessionId}&click_id=${clickId}`;
-    window.location.href = redirectUrl;
-  };
+  const redirectUrl = `http://localhost:3000${basePath}?token=${token}&session_id=${sessionId}&click_id=${clickId}`;
+  
+  window.location.href = redirectUrl;
+};
 
   if (!token || !user) {
     return (

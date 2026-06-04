@@ -70,12 +70,15 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   const [showReactionInfo, setShowReactionInfo] = useState(false);
   const [reactionInfo, setReactionInfo] = useState(null);
   const [activeReactionTab, setActiveReactionTab] = useState("all");
+  const onNewMessageRef = useRef(onNewMessage);
     
   
   
   
   
-  
+  useEffect(() => {
+  onNewMessageRef.current = onNewMessage;
+}, [onNewMessage]);
   
 
   // GROUP id default — keep using a dynamic conversation prop if provided
@@ -137,85 +140,72 @@ const validateAndAddFiles = useCallback((files) => {
       };
     }, []);
 
-  // create socket once when token available
-  useEffect(() => {
+useEffect(() => {
     if (!token) return;
-    // ensure socket is created and available globally (same as 1:1)
     const s = getSocket() || createSocket(token);
     socketRef.current = s;
 
-    // join this group room
     s.emit("join_group", { token, group_id: GROUP_ID });
 
-    // new group message
-    // new group message (with reply support)
-s.on("new_group_message", (msg) => {
-  const unified = {
-    id: msg.id,
-    sender_id: msg.sender_id,
-    sender_name: msg.sender_name,
-    message: msg.message,
-    message_type: msg.message_type || msg.type,
-    timestamp: msg.timestamp,
-    file_size: msg.file_size || null,
-    reply_to: msg.reply_to || null,
-    reply_to_user: msg.reply_to_user || null,
-    reply_to_text: msg.reply_to_text || null,
-  };
+    // ⭐ 1. Store the logic in a named function
+    const handleNewGroupMessage = (msg) => {
+      const unified = {
+        id: msg.id,
+        sender_id: msg.sender_id,
+        sender_name: msg.sender_name,
+        message: msg.message,
+        message_type: msg.message_type || msg.type,
+        timestamp: msg.timestamp,
+        file_size: msg.file_size || null,
+        reply_to: msg.reply_to || null,
+        reply_to_user: msg.reply_to_user || null,
+        reply_to_text: msg.reply_to_text || null,
+      };
 
-  setMessages((prev) => [
-    ...prev,
-    {
-      ...unified,
-      reply_to_message: unified.reply_to
-        ? {
-            sender_name: unified.reply_to_user,
-            message: unified.reply_to_text,
-          }
-        : null,
-    },
-  ]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...unified,
+          reply_to_message: unified.reply_to
+            ? {
+                sender_name: unified.reply_to_user,
+                message: unified.reply_to_text,
+              }
+            : null,
+        },
+      ]);
 
+      if (typeof onNewMessageRef.current === "function") {
+        onNewMessageRef.current({
+          groupId: GROUP_ID,
+          message: unified.message,
+          message_type: unified.message_type,
+          timestamp: unified.timestamp,
+        });
+      }
 
-  // notify parent
-  if (typeof onNewMessage === "function") {
-    onNewMessage({
-      groupId: GROUP_ID,
-      message: unified.message,
-      message_type: unified.message_type,
-      timestamp: unified.timestamp,
-    });
-  }
+      if (conversation?.isGroup && msg.group_id === conversation.id) {
+        fetch(`${API_URL}/group_seen/${conversation.id}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
 
-  if (conversation?.isGroup && msg.group_id === conversation.id) {
-    fetch(`${API_URL}/group_seen/${conversation.id}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  }
+      setTimeout(() => {
+        if (messagesRef.current) {
+          messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+        }
+      }, 40);
+    };
 
-  // ✅ Auto scroll
-  setTimeout(() => {
-    if (messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }
-  }, 40);
-});
-
-
-    // reaction updates
-    s.on("group_reaction_update", (data) => {
+    const handleReactionUpdate = (data) => {
       setReactions(prev => ({
         ...prev,
         [data.message_id]: data.reactions || []
       }));
-    });
+    };
 
-    
-
-    // typing events
-    s.on("group_typing", (d) => {
-      // d: { group_id, username, typing: true/false }
+    const handleGroupTyping = (d) => {
       if (d.group_id !== GROUP_ID) return;
       setTypingUsers((prev) => {
         if (d.typing) {
@@ -225,15 +215,20 @@ s.on("new_group_message", (msg) => {
           return prev.filter((u) => u !== d.username);
         }
       });
-    });
+    };
+
+    // ⭐ 2. Attach the specific functions
+    s.on("new_group_message", handleNewGroupMessage);
+    s.on("group_reaction_update", handleReactionUpdate);
+    s.on("group_typing", handleGroupTyping);
 
     return () => {
-      s?.off("new_group_message");
-      s?.off("group_reaction_update");
-      s?.off("group_typing");
+      // ⭐ 3. Unbind ONLY these specific handlers on unmount
+      s?.off("new_group_message", handleNewGroupMessage);
+      s?.off("group_reaction_update", handleReactionUpdate);
+      s?.off("group_typing", handleGroupTyping);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, GROUP_ID]);
+  }, [token, GROUP_ID, conversation]); // Include conversation dependency if needed
 
   const fetchMessageInfo = async (msgId) => {
   try {
