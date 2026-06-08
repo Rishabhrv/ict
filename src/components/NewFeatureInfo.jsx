@@ -87,7 +87,7 @@ const NewFeatureInfo = ({ isOpen, onClose, user, token }) => {
           }}
           className="w-full cursor-pointer bg-gradient-to-r from-[#f47f7f] to-[#d95f5f] hover:opacity-90 text-white py-[12px] rounded-[14px] font-bold text-[14px] transition-all shadow-[0_6px_18px_rgba(243,124,124,0.30)]"
         >
-          Explore Now
+          Ok Got It!
         </button>
       </div>
     </div>
