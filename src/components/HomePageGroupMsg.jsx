@@ -1125,13 +1125,13 @@ const handleBulkDeleteConfirmed = async () => {
         onDrop={handleDrop}
       >
         {/* Header */}
-        <div className="flex border-b border-gray-200 py-2 px-6 justify-between bg-white shadow-sm">
+        <div className="flex border-b border-gray-200 py-3 px-6 justify-between bg-white shadow-sm">
           <div className="flex items-center">
             <div
-                  className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white font-bold text-[11px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] bg-gradient-to-br from-[#9ca3af] to-[#6b7280]
+                  className={`w-[45px] h-[45px] rounded-[10px] flex items-center justify-center text-white font-bold text-[11px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] bg-gradient-to-br from-[#9ca3af] to-[#6b7280]
                   }`}
                 >
-                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                   <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
                       <circle cx="9" cy="7" r="4" />
                       <path d="M23 21v-2a4 4 0 00-3-3.87" />

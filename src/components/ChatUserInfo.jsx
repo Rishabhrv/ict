@@ -25,6 +25,7 @@ const ChatUserInfo = ({ token, conversation, user }) => {
   const [otherUserStatus, setOtherUserStatus] = useState({ isOnline: false, lastSeen: null });
   const storedSession = localStorage.getItem("session_id");
   const [previewImage, setPreviewImage] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(12);
 
 
 
@@ -139,6 +140,10 @@ const ChatUserInfo = ({ token, conversation, user }) => {
   const imageFiles = mediaFiles.filter((f) => f.message_type === "image");
   const docFiles = mediaFiles.filter((f) => f.message_type === "file");
 
+  const hasMore = activeTab === "images" 
+    ? visibleCount < imageFiles.length 
+    : visibleCount < docFiles.length;
+
   const getFileIcon = (url) => {
     const ext = url.split(".").pop().toLowerCase();
     if (["pdf"].includes(ext)) return faFilePdf;
@@ -217,41 +222,48 @@ const ChatUserInfo = ({ token, conversation, user }) => {
         </button>
       </div>
 
-      {/* Tab Content */}
+     {/* Tab Content */}
       <div className="flex-1 overflow-y-auto px-[14px] custom-scrollbar">
         {activeTab === "images" && (
           <div className="grid grid-cols-3 gap-[8px]">
-            {imageFiles.length > 0 ? imageFiles.map((file, i) => (
+            {imageFiles.slice(0, visibleCount).map((file, i) => (
               <img
                 key={i}
                 src={file.file_url}
                 alt="Media"
                 className="w-full h-[75px] object-cover rounded-[10px] cursor-pointer hover:scale-105 transition"
-                // CHANGE THIS LINE:
                 onClick={() => setPreviewImage(file.file_url)}
               />
-            )) : <p className="text-[12px] text-[#bab0a8] col-span-3 text-center mt-5">No images yet</p>}
+            ))}
           </div>
         )}
 
         {activeTab === "docs" && (
           <div className="flex flex-col gap-[8px]">
-            {docFiles.length > 0 ? docFiles.map((file, i) => (
+            {docFiles.slice(0, visibleCount).map((file, i) => (
               <div key={i} className="flex items-center gap-[10px] bg-[#f6f2ee] rounded-[10px] p-[10px]">
                 <div className="w-[34px] h-[34px] rounded-[8px] bg-white flex items-center justify-center text-[#9a9290]">
                   <FontAwesomeIcon className="text-red-400" icon={getFileIcon(file.file_url)} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium text-[#181818] truncate">
-                    {file.file_url.split("/").pop()}
-                  </p>
+                  <p className="text-[12px] font-medium text-[#181818] truncate">{file.file_url.split("/").pop()}</p>
                 </div>
                 <button onClick={() => window.open(file.file_url, "_blank")} className="text-[#bab0a8] hover:text-[#f47f7f] cursor-pointer">
                   <FontAwesomeIcon icon={faCircleDown} />
                 </button>
               </div>
-            )) : <p className="text-[12px] text-[#bab0a8] text-center mt-5">No documents yet</p>}
+            ))}
           </div>
+        )}
+
+        {/* ✅ Load More Button */}
+        {hasMore && (
+          <button 
+            onClick={() => setVisibleCount(prev => prev + 12)}
+            className="w-full mt-4 py-2 text-[12px] text-[#f47f7f] font-bold bg-[#fff1f1] rounded-[10px] hover:bg-[#f47f7f] hover:text-white transition cursor-pointer"
+          >
+            Load More
+          </button>
         )}
       </div>
 

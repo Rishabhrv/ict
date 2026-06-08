@@ -67,7 +67,6 @@ const HomePage = () => {
   const [ , setSessionId] = useState(null);
   const [ , setClickId] = useState(null);
   const [scrollToMessageId, setScrollToMessageId] = useState(null);
-  const [showAllUsers, setShowAllUsers] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   
 
@@ -309,8 +308,6 @@ const handleSelectConversation = (conv) => {
   <Slidebar
     user={user}
     token={token}
-    showAllUsers={showAllUsers}
-    onToggleAllUsers={() => setShowAllUsers(prev => !prev)}
     profileImage={profileImage} onProfileImageChange={setProfileImage}
   />
   
@@ -319,7 +316,6 @@ const handleSelectConversation = (conv) => {
     onSelectConversation={handleSelectConversation}
     user={user}
     lastMessageUpdate={lastMessageUpdate}
-    showAllUsers={showAllUsers}  
     profileImage={profileImage}       // ← new
   />
 

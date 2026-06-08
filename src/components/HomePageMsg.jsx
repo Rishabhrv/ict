@@ -332,6 +332,14 @@ const isNearBottom = () => {
   return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
 };
 
+useEffect(() => {
+  const s = getSocket();
+  if (!s || !token) return;
+
+  // Manually trigger online status when this component mounts
+  s.emit("user_connected", { token });
+}, [token]);
+
   // ✅ Initialize socket
   useEffect(() => {
     if (!token) return;

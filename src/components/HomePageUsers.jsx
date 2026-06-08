@@ -6,7 +6,7 @@ import { createSocket } from "../socket";
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate, showAllUsers }) => {
+const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate }) => {
 
   const [convos, setConvos] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -14,6 +14,7 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate, s
   const [loading, setLoading] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
+  const [showAllUsers, setShowAllUsers] = useState(false);
 
   // ✅ Message search states
   const [messageResults, setMessageResults] = useState([]);
@@ -308,11 +309,11 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate, s
         {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[30px] bg-[#f47f7f] rounded-r-[3px]" />}
 
         {/* Avatar */}
-        <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white font-bold text-[11px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] overflow-hidden ${c.type === "group" ? "bg-gradient-to-br from-[#9ca3af] to-[#6b7280]" : "bg-gradient-to-br from-[#f47f7f] to-[#d95f5f]"}`}>
+        <div className={`w-[50px] h-[50px] rounded-[10px] flex items-center justify-center text-white font-bold text-[15px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] overflow-hidden ${c.type === "group" ? "bg-gradient-to-br from-[#9ca3af] to-[#6b7280]" : "bg-gradient-to-br from-[#f47f7f] to-[#d95f5f]"}`}>
           {c.type === "group"
             ? c.group_image
               ? <img src={c.group_image} alt="Group" className="w-full h-full object-cover" />
-              : <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              : <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
             : c.profile_image
               ? <img src={c.profile_image} alt="Profile" className="w-full h-full object-cover" />
               : avatarLetter
@@ -320,9 +321,11 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate, s
           {c.status === "online" && <div className="absolute -bottom-[1px] -right-[1px] w-[11px] h-[11px] bg-[#4ade80] rounded-full border-[2.5px] border-white" />}
         </div>
 
+        
+
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <div className="text-[14px] font-semibold text-[#181818] font-['Outfit',sans-serif] whitespace-nowrap overflow-hidden text-ellipsis mb-[2.5px] tracking-[-0.1px]">{name}</div>
+          <div className="text-[15px] font-semibold text-[#181818] font-['Outfit',sans-serif] whitespace-nowrap overflow-hidden text-ellipsis mb-[2.5px] tracking-[-0.1px]">{name}</div>
           <div className="text-[11.5px] text-[#9a9290] whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1">
             {(() => {
               if (c.type === "group") {
@@ -358,7 +361,7 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate, s
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
-    <div className="w-[296px] min-w-[296px] bg-white border-r border-[#ece7e0] flex flex-col h-screen font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="w-[336px] min-w-[336px] bg-white border-r border-[#ece7e0] flex flex-col h-screen font-['Plus_Jakarta_Sans',sans-serif]">
       <style>{`.custom-scrollbar::-webkit-scrollbar{width:3px}.custom-scrollbar::-webkit-scrollbar-thumb{background:#ede5e0;border-radius:2px}`}</style>
 
       {/* Header */}
@@ -368,12 +371,50 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate, s
             {user.username}
           </span>
         
-          <div className="w-[32px] h-[32px] rounded-full bg-gradient-to-br from-[#f47f7f] to-[#d95f5f] flex items-center justify-center text-white text-[11px] font-bold   font-['Outfit',sans-serif] shrink-0 overflow-hidden">
-            {user?.profile_image
-              ? <img src={user.profile_image} alt="Profile" className="w-full h-full object-cover" />
-              : user?.username?.slice(0, 2).toUpperCase() || "SH"
-            }
-          </div>
+           <button
+  onClick={async () => {
+    if (showAllUsers) {
+      // 🔴 If already showing all users, undo it
+      setShowAllUsers(false);
+      setSearchResults([]);
+      setSearchTerm("");
+      return;
+    }
+   
+
+    // 🟢 Otherwise, show all users
+    setLoading(true);
+    setShowAllUsers(true);
+    try {
+      const res = await fetch(`${API_URL}/all_users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      const userList = Array.isArray(data) ? data : [];
+
+      const existingUsernames = new Set(convos.map((c) => c.other_username));
+      const result = userList.map((u) => ({
+        ...u,
+        hasConversation: existingUsernames.has(u.username),
+      }));
+
+      setSearchResults(result);
+      setSearchTerm("");
+    } catch (err) {
+      console.error("Error fetching all users:", err);
+    } finally {
+      setLoading(false);
+    }
+  }}
+  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+  title={showAllUsers ? "Hide all users" : "Show all users"}
+>
+  {showAllUsers ? (
+    <X className="w-5 h-5 text-gray-600 cursor-pointer" />
+  ) : (
+    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#f47f7f"><path d="M120-160v-600q0-33 23.5-56.5T200-840h480q33 0 56.5 23.5T760-760v203q-10-2-20-2.5t-20-.5q-10 0-20 .5t-20 2.5v-203H200v400h283q-2 10-2.5 20t-.5 20q0 10 .5 20t2.5 20H240L120-160Zm160-440h320v-80H280v80Zm0 160h200v-80H280v80Zm400 280v-120H560v-80h120v-120h80v120h120v80H760v120h-80ZM200-360v-400 400Z"/></svg>
+  )}
+</button>
         </div>
 
         {/* Search bar */}

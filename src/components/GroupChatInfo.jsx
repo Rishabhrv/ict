@@ -22,6 +22,7 @@ const GroupChatInfo = ({ token, conversation, user }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [previewImage, setPreviewImage] = useState(null); 
   const storedSession = localStorage.getItem("session_id");
+  const [visibleCount, setVisibleCount] = useState(12);
 
   // ✅ Download Utility
   const downloadFile = async (url) => {
@@ -109,6 +110,9 @@ const GroupChatInfo = ({ token, conversation, user }) => {
 
   const imageFiles = mediaFiles.filter((f) => f.message_type === "image");
   const docFiles = mediaFiles.filter((f) => f.message_type === "file");
+  const hasMore = activeTab === "images" 
+    ? visibleCount < imageFiles.length 
+    : visibleCount < docFiles.length;
 
   const getFileIcon = (url) => {
     const ext = url.split(".").pop().toLowerCase();
@@ -177,6 +181,15 @@ const GroupChatInfo = ({ token, conversation, user }) => {
               </div>
             ))}
           </div>
+        )}
+
+        {hasMore && (
+          <button 
+            onClick={() => setVisibleCount(prev => prev + 12)}
+            className="w-full mt-4 py-2 text-[12px] text-[#f47f7f] font-bold bg-[#fff1f1] rounded-[10px] hover:bg-[#f47f7f] hover:text-white transition cursor-pointer"
+          >
+            Load More
+          </button>
         )}
         
         {/* Members List */}
