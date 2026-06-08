@@ -17,10 +17,12 @@ import {
   faReply,
   faCircleInfo,
   faEllipsisVertical,
+  faTimes,
+  faCopy,
 } from "@fortawesome/free-solid-svg-icons";
-import { Smile, Send, Users, ArrowDown } from "lucide-react";
+import { Smile, Send, ArrowDown } from "lucide-react";
 import { createSocket, getSocket } from "../socket";
-import BackImage from "../components/Images/1211.jpg";
+import BackImage from "../components/Images/1211.png";
 import EmojiPicker from "emoji-picker-react";
 import ShareMessageModal from "./ShareMessageModal";
 import GroupChatInfo from "./GroupChatInfo";
@@ -31,7 +33,8 @@ const API_URL = process.env.REACT_APP_API_URL;
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const MAX_FILES = 10;
 
-const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
+const HomePageGroupMsg = ({ token, conversation, user, onNewMessage, scrollToMessageId, onScrollComplete }) => {
+
   // --- UI states (kept same names / structure) ---
   const [showMenu, setShowMenu] = useState(null);
 
@@ -79,6 +82,15 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage }) => {
   useEffect(() => {
   onNewMessageRef.current = onNewMessage;
 }, [onNewMessage]);
+
+
+
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text).then(() => {
+    showErrorPopup("Text copied to clipboard! ✅");
+    setShowMenu(null); // Close menu after copying
+  }).catch(err => console.error("Failed to copy:", err));
+};
   
 
   // GROUP id default — keep using a dynamic conversation prop if provided
@@ -204,6 +216,7 @@ useEffect(() => {
         [data.message_id]: data.reactions || []
       }));
     };
+    
 
     const handleGroupTyping = (d) => {
       if (d.group_id !== GROUP_ID) return;
@@ -219,7 +232,13 @@ useEffect(() => {
 
     // ⭐ 2. Attach the specific functions
     s.on("new_group_message", handleNewGroupMessage);
-    s.on("group_reaction_update", handleReactionUpdate);
+    s.on("group_reaction_update", (data) => {
+    setReactions(prev => ({
+      ...prev,
+
+      [data.message_id]: data.reactions || [] 
+    }));
+  });
     s.on("group_typing", handleGroupTyping);
 
     return () => {
@@ -283,6 +302,53 @@ const sendShareMessageToGroup = async (groupIds) => {
   }
 };
 
+
+// ✅ Jump to a message from chat search
+useEffect(() => {
+  if (!scrollToMessageId || !GROUP_ID) return;
+  let cancelled = false;
+
+  const timer = setTimeout(() => {
+    if (cancelled) return;
+    const found = messages.find(m => m.id === scrollToMessageId);
+
+    if (found) {
+      scrollToMessage(scrollToMessageId);
+      onScrollComplete?.();
+    } else if (messages.length > 0) {
+      fetch(`${API_URL}/group_messages/${GROUP_ID}/context/${scrollToMessageId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (cancelled || !Array.isArray(data) || !data.length) return;
+          const unified = data.map(m => ({
+            id: m.id, sender_id: m.sender_id,
+            sender_name: m.sender_name || "Unknown",
+            message: m.message,
+            message_type: m.message_type || "text",
+            timestamp: m.timestamp,
+            file_size: m.file_size || null,
+            reply_to: m.reply_to || null,
+            reply_to_message: m.reply_to_message || null,
+            reply_to_user: m.reply_to_user || null,
+            original_name: m.original_name || null,
+          }));
+          setMessages(unified);
+          setOffset(unified.length);
+          setHasMore(true);
+          setTimeout(() => {
+            if (cancelled) return;
+            scrollToMessage(scrollToMessageId);
+            onScrollComplete?.();
+          }, 200);
+        })
+        .catch(console.error);
+    }
+  }, 450);
+
+  return () => { cancelled = true; clearTimeout(timer); };
+}, [scrollToMessageId, GROUP_ID]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
 
@@ -440,23 +506,28 @@ useEffect(() => {
   setMultiSelectMode(false);
   setSelectedMessages([]);
 
-  const loadInitialMessages = async () => {
-    const res = await fetch(
-      `${API_URL}/group_messages/${GROUP_ID}?offset=0&limit=${LIMIT}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+ const loadInitialMessages = async () => {
+    try {
+      const res = await fetch(
+        `${API_URL}/group_messages/${GROUP_ID}?offset=0&limit=${LIMIT}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    let data = await res.json();
-    const safeData = Array.isArray(data) ? data : [];
+      // ✅ ADD THIS CHECK
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("❌ Server Error:", errorText);
+        showErrorPopup("Failed to load messages (Server Error)");
+        return;
+      }
 
-    setMessages(safeData);
-
-    // Set correct offset
-    setOffset(safeData.length);
-
-    // Hide button if no more messages
-    if (safeData.length < LIMIT) {
-      setHasMore(false);
+      let data = await res.json();
+      const safeData = Array.isArray(data) ? data : [];
+      setMessages(safeData);
+      setOffset(safeData.length);
+      if (safeData.length < LIMIT) setHasMore(false);
+    } catch (err) {
+      console.error("❌ Group messages load error:", err);
     }
   };
 
@@ -495,11 +566,16 @@ useEffect(() => {
     e.stopPropagation();
     setDragActive(true);
   };
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+ const handleDragLeave = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  // Only turn off if the relatedTarget (where you are moving) 
+  // is outside the current target
+  if (e.relatedTarget === null || !e.currentTarget.contains(e.relatedTarget)) {
     setDragActive(false);
-  };
+  }
+};
 
   const handleDrop = (e) => {
   e.preventDefault();
@@ -1034,7 +1110,7 @@ const handleBulkDeleteConfirmed = async () => {
 
   // ----- Render -----
   return (
-    <div className="flex w-full">
+    <div className="flex w-full font-['Plus_Jakarta_Sans',sans-serif]">
       <div
         style={{
           backgroundImage: `url(${BackImage})`,
@@ -1051,7 +1127,18 @@ const handleBulkDeleteConfirmed = async () => {
         {/* Header */}
         <div className="flex border-b border-gray-200 py-2 px-6 justify-between bg-white shadow-sm">
           <div className="flex items-center">
-            <Users className="w-12 h-12 rounded-full object-cover bg-gray-100 p-2 text-gray-600" />
+            <div
+                  className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-white font-bold text-[11px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] bg-gradient-to-br from-[#9ca3af] to-[#6b7280]
+                  }`}
+                >
+                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 00-3-3.87" />
+                      <path d="M16 3.13a4 4 0 010 7.75" />
+                    </svg>
+                </div>
+            
             <div className="pl-3">
               <h3 className="text-lg font-semibold text-gray-900">
                 {conversation?.group_name || "Study Group"}
@@ -1062,15 +1149,22 @@ const handleBulkDeleteConfirmed = async () => {
               )}
             </div>
           </div>
-          <div 
-          onClick={() => setShowInfo(!showInfo)}
-          className="p-2 cursor-pointer hover:text-gray-600">
-            <FontAwesomeIcon icon={faBars} className="text-gray-500" />
+          <div
+            className="p-2 cursor-pointer hover:text-gray-600 transition-colors"
+            onClick={() => setShowInfo(!showInfo)}
+          >
+            {/* The icon now changes to faTimes when showInfo is true */}
+            <FontAwesomeIcon 
+              icon={showInfo ? faTimes : faBars} 
+              className="text-gray-500" 
+            />
           </div>
         </div>
 
         {dragActive && (
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div 
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none"
+          >
             <div className="bg-white p-60 px-80 rounded-xl shadow-lg text-center cursor-pointer">
               <p className="text-lg font-semibold text-gray-700">Drop files here</p>
               <p className="text-sm text-gray-500">Images, Docs, Videos, etc.</p>
@@ -1126,7 +1220,7 @@ const handleBulkDeleteConfirmed = async () => {
             <div className="text-center py-2">
               <button
                 onClick={loadOlderMessages}
-                className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full  text-xs hover:bg-gray-300 cursor-pointer"
+                className="bg-white text-black px-3 py-1 rounded-full  text-xs hover:bg-red-300 hover:text-white cursor-pointer"
               >
                 {loadingMore ? "Loading..." : "Load older messages"}
               </button>
@@ -1167,7 +1261,7 @@ const handleBulkDeleteConfirmed = async () => {
                 
                 {currentLabel !== prevLabel && (
                   <div className="flex justify-center my-3">
-                    <div className="text-center text-gray-500 text-xs bg-gray-200 px-3 py-1 rounded-full shadow-sm">
+                    <div className="text-center text-gray-500 text-xs bg-white px-3 py-1 rounded-full shadow-sm">
                       {currentLabel}
                     </div>
                   </div>
@@ -1269,19 +1363,32 @@ const handleBulkDeleteConfirmed = async () => {
                         </div>
                       )}
                             {mine ? 
-                                <button
-                                  onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
-                                  className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
-                                >
-                                  <FontAwesomeIcon icon={faEllipsisVertical} />
-                                </button>
+                                <div className="flex items-center">  
+                                {msg.message_type === 'text' && showMenu !== msg.id && (
+                                    <button
+                                      title="Copy"
+                                      onClick={() => copyToClipboard(msg.message)}
+                                      className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                                    >
+                                      <FontAwesomeIcon icon={faCopy} />
+                                    </button>
+                                  )}               
+                                  <button
+                                    className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                                    onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
+                                  >
+                                    <FontAwesomeIcon icon={faEllipsisVertical} />
+                                  </button>
+                                
+                                  
+                                </div>
 
                                 : <></>
                               }
                               
                             <div
                             className={`w-fit max-w-xl px-1 py-1 rounded-xl shadow-xl ${
-                              mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-gray-200 text-gray-900 rounded-bl-sm"
+                              mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-white text-gray-900 rounded-bl-sm"
                             }`}
                             
                           >
@@ -1405,7 +1512,7 @@ const handleBulkDeleteConfirmed = async () => {
                               else if (["txt"].includes(ext)) { fileIcon = faFileLines; iconColor = "text-gray-400"; }
 
                               return (
-                                <div className="bg-white flex items-center space-x-3 border border-gray-300 rounded-lg p-2 shadow-sm hover:shadow-md transition">
+                                <div className="bg-white flex items-center space-x-3 border border-red-300 rounded-lg p-2 shadow-sm hover:shadow-md transition">
                                   <div className="bg-gray-100 w-9 h-9 flex items-center justify-center rounded-full">
                                     <FontAwesomeIcon icon={fileIcon} className={`${iconColor} text-lg`} />
                                   </div>
@@ -1493,13 +1600,24 @@ const handleBulkDeleteConfirmed = async () => {
                           }
                         </div>
                         {mine ? <></>
-                          : 
-                          <button
-                            onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
-                            className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
-                          >
-                            <FontAwesomeIcon icon={faEllipsisVertical} />
-                          </button>
+                          :       
+                            <div className="flex items-center">
+                              <button
+                                className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                                onClick={() => setShowMenu(showMenu === msg.id ? null : msg.id)}
+                              >
+                                <FontAwesomeIcon icon={faEllipsisVertical} />
+                              </button>
+                              {msg.message_type === 'text' && showMenu !== msg.id && (
+                                <button
+                                  title="Copy"
+                                  onClick={() => copyToClipboard(msg.message)}
+                                  className="opacity-0 group-hover:opacity-100 ml-2 mt-1 text-gray-400 hover:text-gray-600 transition cursor-pointer"
+                                >
+                                  <FontAwesomeIcon icon={faCopy} />
+                                </button>
+                              )}
+                            </div>
                           }
 
                       {/* popup */}
@@ -1577,41 +1695,34 @@ const handleBulkDeleteConfirmed = async () => {
 
                       </div>
 
-                        {/* reactions */}
-                        {reactions[msg.id]?.length > 0 && (
-                          <div className={`flex mt-1 ${mine ? "justify-end" : "justify-start"}`}>
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReactionInfo({
-                                  message_id: msg.id,
-                                  reactions: reactions[msg.id],
-                                  anchorEl: e.currentTarget,
-                                  mine,
-                                });
-                                setActiveReactionTab("all");
-                                console.log("REACTIONS DATA 👉", reactions[msg.id]);
-                                setShowReactionInfo(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full
-                                         bg-white shadow-sm cursor-pointer"
-                            >
-                              <span>{reactions[msg.id][0].emoji}</span>
-                              <span className="text-xs text-gray-600 font-medium">
-                                {reactions[msg.id].length}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        
-
-
-
-
+                        {/* This is the small chip under the message */}
+{reactions[msg.id]?.length > 0 && (
+  <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        setReactionInfo({
+          message_id: msg.id,
+          reactions: reactions[msg.id], // This is now an array of objects
+          anchorEl: e.currentTarget,
+          mine,
+        });
+        setActiveReactionTab("all");
+        setShowReactionInfo(true);
+      }}
+      className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full bg-white shadow-sm cursor-pointer"
+    >
+      {/* Access the .emoji property of the first object in the array */}
+      <span>{reactions[msg.id][0].emoji}</span>
+      <span className="text-xs text-gray-600 font-medium">
+        {reactions[msg.id].length}
+      </span>
+    </div>
+  </div>
+)}
                         {/* time + optional seen icon (group doesn't track per-user seen here) */}
                         <div className={`flex ${mine ? "justify-end" : ""}`}>
-                          <p className={`text-xs pt-1 text-gray-500 ${mine ? "text-right" : "text-left"}`}>
+                          <p className={`text-xs pt-1 text-black ${mine ? "text-right" : "text-left"}`}>
                             {formatTime(msg.timestamp)}
                           </p>
                         </div>
@@ -2041,48 +2152,40 @@ const handleBulkDeleteConfirmed = async () => {
           ))}
         </div>
 
-        {/* User list */}
-        <div className="max-h-[300px] overflow-y-auto p-3">
-          {reactionInfo.reactions
-            .filter(r => activeReactionTab === "all" || r.emoji === activeReactionTab)
-            .map((r, i) => {
-              const isMe = r.user_id === user.id;
+{/* User list inside the Reaction Info popup */}
+<div className="max-h-[300px] overflow-y-auto p-3">
+  {reactionInfo.reactions
+    .filter(r => activeReactionTab === "all" || r.emoji === activeReactionTab)
+    .map((r, i) => {
+      const isMe = r.user_id === user.id;
 
-              return (
-                <div
-                  key={i}
-                  className="flex items-center justify-between py-2 border-b last:border-0 border-gray-200"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                      {(r.username || r.sender_name || r.user || "?")[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">
-                        {isMe
-                          ? "You"
-                          : r.username || r.sender_name || r.user || "Unknown"}
-                      </p>
-
-                      {isMe && (
-                        <p
-                          className="text-xs text-gray-400 cursor-pointer"
-                          onClick={() => {
-                            handleAddReaction(reactionInfo.message_id, r.emoji);
-                            setShowReactionInfo(false);
-                          }}
-                        >
-                          Click to remove
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <span className="text-lg">{r.emoji}</span>
-                </div>
-              );
-            })}
+      return (
+        <div key={i} className="flex items-center justify-between py-2 border-b last:border-0 border-gray-200">
+          <div className="flex items-center gap-3">
+            {/* ✅ UPDATED AVATAR RENDERING */}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#f47f7f] to-[#d95f5f] flex items-center justify-center text-white text-[10px] font-bold overflow-hidden shrink-0">
+                {r.profile_image ? (
+                  <img src={r.profile_image} alt={r.username} className="w-full h-full object-cover" />
+                ) : (
+                  (r.username || "?")[0]?.toUpperCase()
+                )}
+            </div>
+            <div>
+              <p className="text-sm font-medium">{isMe ? "You" : r.username}</p>
+              <p className="text-[10px] text-gray-400">
+                {r.created_at 
+                  ? new Date(r.created_at).toLocaleString("en-IN", { 
+                      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true 
+                    }) 
+                  : ""}
+              </p>
+            </div>
+          </div>
+          <span className="text-lg">{r.emoji}</span>
         </div>
+      );
+    })}
+</div>
 
         {/* Close */}
         <button
