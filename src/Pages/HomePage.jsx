@@ -66,6 +66,11 @@ const HomePage = () => {
   const [popupMsg, setPopupMsg] = useState(""); // ✅ popup message state
   const [ , setSessionId] = useState(null);
   const [ , setClickId] = useState(null);
+  const [scrollToMessageId, setScrollToMessageId] = useState(null);
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [profileImage, setProfileImage] = useState(null);
+  
+
   
 
   // ✅ Custom popup function
@@ -198,6 +203,7 @@ const checkTokenExpiry = (token) => {
         ...userDetails,
       });
       setIsValidating(false);
+      setProfileImage(userDetails.profile_image || null);
 
     } catch (err) {
       console.error("Token validation failed:", err);
@@ -290,15 +296,31 @@ useEffect(() => {
   );
 }
 
+const handleSelectConversation = (conv) => {
+  if (!conv) { setSelectedConv(null); setScrollToMessageId(null); return; }
+  const { _scrollToMessageId, ...cleanConv } = conv;
+  setSelectedConv(cleanConv);
+  setScrollToMessageId(_scrollToMessageId || null);
+};
+
   return (
     <div className="flex">
-  <Slidebar user={user} token={token}/>
 
+  <Slidebar
+    user={user}
+    token={token}
+    showAllUsers={showAllUsers}
+    onToggleAllUsers={() => setShowAllUsers(prev => !prev)}
+    profileImage={profileImage} onProfileImageChange={setProfileImage}
+  />
+  
   <HomePageUsers
     token={token}
-    onSelectConversation={(conv) => setSelectedConv(conv)}
+    onSelectConversation={handleSelectConversation}
     user={user}
     lastMessageUpdate={lastMessageUpdate}
+    showAllUsers={showAllUsers}  
+    profileImage={profileImage}       // ← new
   />
 
   {/* ✅ Conditional render for chat type */}
@@ -309,6 +331,8 @@ useEffect(() => {
         conversation={selectedConv}
         user={user}
         onNewMessage={(data) => setLastMessageUpdate(data)}
+        scrollToMessageId={scrollToMessageId}
+        onScrollComplete={() => setScrollToMessageId(null)}
       />
     ) : (
       <HomePageMsg
@@ -316,6 +340,8 @@ useEffect(() => {
         conversation={selectedConv}
         user={user}
         onNewMessage={(data) => setLastMessageUpdate(data)}
+        scrollToMessageId={scrollToMessageId}
+        onScrollComplete={() => setScrollToMessageId(null)}
       />
     )
   ) : (

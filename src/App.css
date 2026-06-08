@@ -7,6 +7,9 @@ body {
 .App {
   text-align: center;
 }
+button {
+  cursor: pointer;
+}
 
 .App-logo {
   height: 40vmin;
