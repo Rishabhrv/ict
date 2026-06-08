@@ -4,7 +4,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowLeft, faArrowRight, faTimes } from "@fortawesome/free-solid-svg-icons";
 import CreateGroupSlider from "./CreateGroupSlider";
 
-const API_URL = process.env.REACT_APP_API_URL;
 
 const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }) => {
   const [searchTerm, setSearchTerm] = useState("");
