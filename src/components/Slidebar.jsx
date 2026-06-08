@@ -52,7 +52,7 @@ const PRESET_AVATARS = [
   profile20
 ];
 
-const Slidebar = ({ user, token, showAllUsers, onToggleAllUsers }) => {
+const Slidebar = ({ user, token }) => {
 
   const [isSliderOpen, setIsSliderOpen] = useState(false);
   const [showFeaturePopup, setShowFeaturePopup] = useState(false);
@@ -167,20 +167,7 @@ const Slidebar = ({ user, token, showAllUsers, onToggleAllUsers }) => {
           </span>
         </Link>
 
-        <button
-          onClick={onToggleAllUsers}
-          className={`group relative w-[40px] h-[40px] rounded-[12px]  flex items-center justify-center transition-all duration-150  text-[#f47f7f] hover:bg-[#fff1f1] hover:text-[#f47f7f]`}
-        >
-          {showAllUsers
-            ? <X className="w-[18px] h-[18px]" strokeWidth={2.5} />
-            : <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#f47f7f"><path d="M120-160v-600q0-33 23.5-56.5T200-840h480q33 0 56.5 23.5T760-760v203q-10-2-20-2.5t-20-.5q-10 0-20 .5t-20 2.5v-203H200v400h283q-2 10-2.5 20t-.5 20q0 10 .5 20t2.5 20H240L120-160Zm160-440h320v-80H280v80Zm0 160h200v-80H280v80Zm400 280v-120H560v-80h120v-120h80v120h120v80H760v120h-80ZM200-360v-400 400Z"/></svg>
-          }
-          <span className="absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 scale-90 bg-[#1a1a1a] text-white text-[11px] font-medium tracking-[0.2px] py-1 px-[9px] rounded-[6px] whitespace-nowrap opacity-0 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-50">
-            {showAllUsers ? "Close" : "Add Users"}
-          </span>
-        </button>
         
-
         <button onClick={() => setIsSliderOpen(true)} className="group relative w-[40px] h-[40px] rounded-[12px] flex items-center justify-center bg-transparent text-[#d0b0b0] transition-all duration-150 hover:bg-[#fff1f1] hover:text-[#f47f7f]">
           <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#f47f7f"><path d="M500-482q29-32 44.5-73t15.5-85q0-44-15.5-85T500-798q60 8 100 53t40 105q0 60-40 105t-100 53Zm220 322v-120q0-36-16-68.5T662-406q51 18 94.5 46.5T800-280v120h-80Zm80-280v-80h-80v-80h80v-80h80v80h80v80h-80v80h-80Zm-593-87q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM0-160v-112q0-34 17.5-62.5T64-378q62-31 126-46.5T320-440q66 0 130 15.5T576-378q29 15 46.5 43.5T640-272v112H0Zm320-400q33 0 56.5-23.5T400-640q0-33-23.5-56.5T320-720q-33 0-56.5 23.5T240-640q0 33 23.5 56.5T320-560ZM80-240h480v-32q0-11-5.5-20T540-306q-54-27-109-40.5T320-360q-56 0-111 13.5T100-306q-9 5-14.5 14T80-272v32Zm240-400Zm0 400Z"/></svg>
           <span className="absolute left-[calc(100%+10px)] top-1/2 -translate-y-1/2 scale-90 bg-[#1a1a1a] text-white text-[11px] font-medium tracking-[0.2px] py-1 px-[9px] rounded-[6px] whitespace-nowrap opacity-0 pointer-events-none transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-50">
@@ -189,17 +176,18 @@ const Slidebar = ({ user, token, showAllUsers, onToggleAllUsers }) => {
         </button>
       </div>
 
-      {/* ── BOTTOM USER AVATAR ── */}
-      <div 
-        onClick={() => setShowProfilePopup(true)} 
-        className="w-[37px] h-[37px] rounded-full bg-gradient-to-br from-[#f47f7f] to-[#d95f5f] flex items-center justify-center text-white text-[11px] font-bold border-[2.5px] border-[#ffdede] shadow-[0_3px_10px_rgba(243,124,124,0.30)] tracking-[0.5px] font-['Outfit',sans-serif] shrink-0 cursor-pointer hover:scale-105 transition-transform duration-200 overflow-hidden"
-      >
-        {profileImage ? (
-          <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
-        ) : (
-          userInitials
-        )}
-      </div>
+     {/* ── BOTTOM USER AVATAR ── */}
+<div 
+  onClick={() => setShowProfilePopup(true)} 
+  /* ADDED shadow-wave-effect HERE */
+  className={`w-[37px] h-[37px] rounded-full bg-gradient-to-br from-[#f47f7f] to-[#d95f5f] flex items-center justify-center text-white text-[11px] font-bold border-[2.5px] border-[#ffdede] shadow-[0_3px_10px_rgba(243,124,124,0.30)] tracking-[0.5px] font-['Outfit',sans-serif] shrink-0 cursor-pointer hover:scale-105 transition-transform duration-200 overflow-hidden ${!profileImage ? 'shadow-wave-effect' : ''}`}
+>
+  {profileImage ? (
+    <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+  ) : (
+    <span className="animate-intense-blink font-bold text-white">{userInitials}</span>
+  )}
+</div>
 
       <AddMemberSlider isOpen={isSliderOpen} onClose={() => setIsSliderOpen(false)} token={token} user={user} API_URL={API_URL} onAddMembers={(selected) => console.log("Selected members:", selected)} />
       

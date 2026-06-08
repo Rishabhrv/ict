@@ -103,7 +103,7 @@ const AddMemberSlider = ({ isOpen, onClose, token, user, API_URL, onAddMembers }
           />
 
           {/* Users List */}
-          <div className="overflow-y-auto custom-scrollbar max-h-[60vh] mt-2">
+          <div className="overflow-y-auto custom-scrollbar max-h-[70vh] mt-2">
             {filteredUsers.length > 0 ? (
               filteredUsers.map((user) => (
                 <div
