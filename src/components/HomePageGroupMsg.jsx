@@ -74,6 +74,7 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage, scrollToMes
   const [reactionInfo, setReactionInfo] = useState(null);
   const [activeReactionTab, setActiveReactionTab] = useState("all");
   const onNewMessageRef = useRef(onNewMessage);
+  const [isChatReady, setIsChatReady] = useState(false);
     
   
   
@@ -498,41 +499,51 @@ const loadOlderMessages = async () => {
   setLoadingMore(false);
 };
 
+// ... existing useEffect imports and states ...
+
 useEffect(() => {
-  // ⭐ Reset when switching to a new chat
+  if (!GROUP_ID) return;
+
+  // ⭐ Reset state
   setHasMore(true);
   setOffset(0);
   setMessages([]);
   setMultiSelectMode(false);
   setSelectedMessages([]);
+  
+  setIsChatReady(false); // 👈 Hide chat immediately
 
- const loadInitialMessages = async () => {
+  const loadInitialMessages = async () => {
     try {
       const res = await fetch(
         `${API_URL}/group_messages/${GROUP_ID}?offset=0&limit=${LIMIT}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // ✅ ADD THIS CHECK
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("❌ Server Error:", errorText);
-        showErrorPopup("Failed to load messages (Server Error)");
-        return;
-      }
-
-      let data = await res.json();
+      const data = await res.json();
       const safeData = Array.isArray(data) ? data : [];
       setMessages(safeData);
       setOffset(safeData.length);
       if (safeData.length < LIMIT) setHasMore(false);
+
+      // ✅ Wait for DOM to render, force scroll to bottom, THEN reveal
+      setTimeout(() => {
+        if (messagesRef.current && !scrollToMessageId) {
+          messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+          setIsChatReady(true); // 👈 Reveal the chat!
+        } else if (!scrollToMessageId) {
+          setIsChatReady(true); // Fallback
+        }
+      }, 150);
+
     } catch (err) {
       console.error("❌ Group messages load error:", err);
+      setIsChatReady(true); // Reveal even on error
     }
   };
 
   loadInitialMessages();
-}, [GROUP_ID, token]);
+}, [GROUP_ID, token, scrollToMessageId]);
 
 
 
@@ -577,7 +588,7 @@ useEffect(() => {
   }
 };
 
-  const handleDrop = (e) => {
+const handleDrop = (e) => {
   e.preventDefault();
   e.stopPropagation();
   setDragActive(false);
@@ -586,6 +597,7 @@ useEffect(() => {
   if (!files.length) return;
 
   validateAndAddFiles(files);
+  setTimeout(() => textareaRef.current?.focus(), 0); // ← add this
 };
 
 
@@ -596,6 +608,7 @@ const handleFileChange = (e) => {
 
   validateAndAddFiles(files);
   e.target.value = "";
+  setTimeout(() => textareaRef.current?.focus(), 0); // ← add this
 };
 
 
@@ -1128,15 +1141,22 @@ const handleBulkDeleteConfirmed = async () => {
         <div className="flex border-b border-gray-200 py-3 px-6 justify-between bg-white shadow-sm">
           <div className="flex items-center">
             <div
-                  className={`w-[45px] h-[45px] rounded-[10px] flex items-center justify-center text-white font-bold text-[11px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] bg-gradient-to-br from-[#9ca3af] to-[#6b7280]
-                  }`}
+                  className="w-[45px] h-[45px] rounded-[10px] flex items-center justify-center text-white font-bold text-[11px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] bg-gradient-to-br from-[#9ca3af] to-[#6b7280] overflow-hidden"
                 >
-                   <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  {conversation?.group_image ? (
+                    <img 
+                      src={conversation.group_image.startsWith("http") ? conversation.group_image : `${API_URL.replace('/api', '')}${conversation.group_image}`} 
+                      alt="Group" 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
                       <circle cx="9" cy="7" r="4" />
                       <path d="M23 21v-2a4 4 0 00-3-3.87" />
                       <path d="M16 3.13a4 4 0 010 7.75" />
                     </svg>
+                  )}
                 </div>
             
             <div className="pl-3">
@@ -1208,6 +1228,12 @@ const handleBulkDeleteConfirmed = async () => {
                 Delete
               </button>
             </div>
+          </div>
+        )}
+
+        {!isChatReady && (
+          <div className="fixed left-100 inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-[2px]">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-red-100 border-t-[#f47f7f]"></div>
           </div>
         )}
 
@@ -1388,14 +1414,14 @@ const handleBulkDeleteConfirmed = async () => {
                               
                             <div
                             className={`w-fit max-w-xl px-1 py-1 rounded-xl shadow-xl ${
-                              mine ? "bg-[#f37c7c] text-white rounded-br-sm ml-auto" : "bg-white text-gray-900 rounded-bl-sm"
+                              mine ? "bg-white text-gray-900 rounded-br-sm ml-auto" : "bg-white text-gray-900 rounded-bl-sm"
                             }`}
                             
                           >
                             {msg.reply_to && (
                               <div
-                                className={`text-xs mb-1 p-1 rounded-md cursor-pointer hover:bg-gray-100 transition ${
-                                  mine ? "border-white bg-white text-red-700" : "border-gray-400 bg-white text-red-700"
+                                className={`text-xs mb-1 p-1 rounded-md cursor-pointer transition ${
+                                  mine ? "border-white bg-gray-100 text-red-700 hover:bg-[#ffe1e1]/90" : "border-gray-400 bg-[#f47f7f] text-white hover:bg-[#f47f7f]/90"
                                 }`}
                                 onClick={() => scrollToMessage(msg.reply_to)}
                               >
@@ -1512,7 +1538,7 @@ const handleBulkDeleteConfirmed = async () => {
                               else if (["txt"].includes(ext)) { fileIcon = faFileLines; iconColor = "text-gray-400"; }
 
                               return (
-                                <div className="bg-white flex items-center space-x-3 border border-red-300 rounded-lg p-2 shadow-sm hover:shadow-md transition">
+                                <div className="bg-white flex items-center space-x-3 rounded-lg p-2  transition">
                                   <div className="bg-gray-100 w-9 h-9 flex items-center justify-center rounded-full">
                                     <FontAwesomeIcon icon={fileIcon} className={`${iconColor} text-lg`} />
                                   </div>
@@ -1722,7 +1748,7 @@ const handleBulkDeleteConfirmed = async () => {
 )}
                         {/* time + optional seen icon (group doesn't track per-user seen here) */}
                         <div className={`flex ${mine ? "justify-end" : ""}`}>
-                          <p className={`text-xs pt-1 text-black ${mine ? "text-right" : "text-left"}`}>
+                          <p className={`text-[11px] pt-1 text-black ${mine ? "text-right" : "text-left"}`}>
                             {formatTime(msg.timestamp)}
                           </p>
                         </div>
@@ -1767,96 +1793,121 @@ const handleBulkDeleteConfirmed = async () => {
                 </div>
               )}
 
-          {/* pending files preview (keeps UI consistent with HomePageMsg) */}
-        {pendingFiles.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto p-3 bg-gray-100 rounded-md m-4">
-            {pendingFiles.map((file, i) => (
-              <div key={i} className="relative min-w-[70px] flex flex-col items-center">
-                {file.type && file.type.startsWith("image/") ? (
-                  <img src={URL.createObjectURL(file)} alt="preview" className="w-14 h-14 object-cover rounded-md border" />
-                ) : (
-                  <div className="w-14 h-14 flex items-center justify-center bg-white border rounded-md">
-                    <FontAwesomeIcon icon={faFile} className="text-gray-500 text-xl" />
-                  </div>
-                )}
-                <p className="text-[10px] mt-1 text-center w-[70px] truncate">{file.name}</p>
-                <button onClick={() => setPendingFiles(pendingFiles.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 text-xs rounded-full cursor-pointer">✕</button>
+       {/* ↩️ REPLAYING TO SECTION */}
+            {replyingTo && (
+              <div className="flex items-start justify-between bg-white/95 backdrop-blur-md mx-3 mb-2 px-4 py-2 rounded-2xl shadow-sm border border-gray-100 border-l-[4px] border-l-[#f47f7f]">
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-[#f47f7f] mb-1">
+                    Replying to {replyingTo.sender_name || replyingTo.reply_to_user || "User"}
+                  </span>
+
+                  {(() => {
+                    const replyText = replyingTo.message || replyingTo.text || "";
+
+                    // 🖼️ IMAGE DETECTION
+                    if (
+                      replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
+                      (replyText.startsWith("http") &&
+                        replyText.includes("/uploads/") &&
+                        replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
+                    ) {
+                      return (
+                        <div className="flex items-center gap-3 mt-1">
+                          <img
+                            src={replyText}
+                            alt="reply-img"
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm"
+                          />
+                          <span className="text-xs text-gray-500 font-medium italic">Photo</span>
+                        </div>
+                      );
+                    }
+
+                    // 📎 FILE DETECTION
+                    if (
+                      replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
+                      (replyText.startsWith("http") &&
+                        replyText.includes("/uploads/") &&
+                        replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i))
+                    ) {
+                      const fileName = replyText.split("/").pop();
+                      const ext = fileName.split(".").pop().toLowerCase();
+
+                      let fileIcon = faFile;
+                      let iconColor = "text-gray-400";
+                      if (["pdf"].includes(ext)) { fileIcon = faFilePdf; iconColor = "text-red-400"; }
+                      else if (["doc", "docx"].includes(ext)) { fileIcon = faFileWord; iconColor = "text-blue-400"; }
+                      else if (["xls", "xlsx", "csv"].includes(ext)) { fileIcon = faFileExcel; iconColor = "text-green-400"; }
+                      else if (["ppt", "pptx"].includes(ext)) { fileIcon = faFilePowerpoint; iconColor = "text-orange-400"; }
+                      else if (["zip", "rar", "7z"].includes(ext)) { fileIcon = faFileZipper; iconColor = "text-yellow-400"; }
+                      else if (["txt"].includes(ext)) { fileIcon = faFileLines; iconColor = "text-gray-500"; }
+
+                      return (
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center">
+                            <FontAwesomeIcon icon={fileIcon} className={`text-sm ${iconColor}`} />
+                          </div>
+                          <span className="text-xs font-medium text-gray-700 truncate max-w-[200px]">
+                            {fileName}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    // 💬 TEXT FALLBACK
+                    return (
+                      <span className="text-xs text-gray-600 line-clamp-2 pr-4 leading-relaxed">
+                        {replyText}
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setReplyingTo(null)}
+                  className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-[#f47f7f] transition-colors ml-2 cursor-pointer"
+                >
+                  <FontAwesomeIcon icon={faTimes} className="text-sm" />
+                </button>
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {replyingTo && (
-  <div className="flex items-center justify-between bg-gray-100 mx-4 mb-1 px-3 py-2 rounded-lg border-l-4 border-[#f37c7c]">
-    <div className="flex flex-col min-w-0">
+            {/* 📎 PENDING FILES PREVIEW */}
+            {pendingFiles.length > 0 && (
+              <div className="flex gap-4 overflow-x-auto bg-white/95 backdrop-blur-md mx-3 mb-2 px-4 py-2 rounded-2xl shadow-sm border border-gray-100 border-l-[4px] border-l-[#f47f7f] hide-scrollbar">
+                {pendingFiles.map((file, i) => (
+                  <div key={i} className="relative min-w-[64px] flex flex-col items-center group">
+                    
+                    {/* PREVIEW IMAGE OR ICON */}
+                    {file.type.startsWith("image/") ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt="preview"
+                        className="w-14 h-14 object-cover rounded-xl border border-gray-200 shadow-sm"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-xl shadow-sm">
+                        <FontAwesomeIcon icon={faFile} className="text-[#f47f7f] text-xl" />
+                      </div>
+                    )}
 
-      <span className="text-xs font-semibold text-gray-600">Replying to:</span>
+                    {/* FILE NAME */}
+                    <p className="text-[10px] mt-1.5 text-gray-500 text-center w-[64px] truncate font-medium">
+                      {file.name}
+                    </p>
 
-      {(() => {
-        const replyText = replyingTo.message || replyingTo.text || "";
-
-        // 🖼️ IMAGE DETECTION
-        if (
-          replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
-          (replyText.startsWith("http") &&
-            replyText.includes("/uploads/") &&
-            replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
-        ) {
-          return (
-            <div className="flex items-center gap-2 mt-1">
-              <img
-                src={replyText}
-                alt="reply-img"
-                className="w-12 h-8 rounded object-cover"
-              />
-            </div>
-          );
-        }
-
-        // 📎 FILE DETECTION
-        if (
-          replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
-          (replyText.startsWith("http") &&
-            replyText.includes("/uploads/") &&
-            replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i))
-        ) {
-          const fileName = replyText.split("/").pop();
-          const ext = fileName.split(".").pop().toLowerCase();
-
-          let fileIcon = "📎";
-          if (["pdf"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePdf} />;
-          else if (["doc", "docx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileWord} />;
-          else if (["xls", "xlsx", "csv"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileExcel} />;
-          else if (["ppt", "pptx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePowerpoint} />;
-          else if (["zip", "rar", "7z"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileZipper} />;
-          else if (["txt"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFile} />;
-
-          return (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[14px] text-gray-700">{fileIcon}</span>
-              <span className="text-sm text-gray-800 truncate max-w-[200px]">{fileName}</span>
-            </div>
-          );
-        }
-
-        // 💬 TEXT fallback
-        return (
-          <span className="text-sm text-gray-800 truncate max-w-[250px]">
-            {replyText.length > 80 ? replyText.slice(0, 80) + "..." : replyText}
-          </span>
-        );
-      })()}
-
-    </div>
-
-    <button
-      onClick={() => setReplyingTo(null)}
-      className="text-gray-500 hover:text-red-500 text-lg"
-    >
-      ✕
-    </button>
-  </div>
-)}
+                    {/* REMOVE BUTTON */}
+                    <button
+                      onClick={() => setPendingFiles(pendingFiles.filter((_, idx) => idx !== i))}
+                      className="absolute -top-2 -right-2 bg-[#ff4b4b] text-white w-[20px] h-[20px] flex items-center justify-center text-[10px] rounded-full cursor-pointer shadow-md border-2 border-white hover:scale-110 transition-transform"
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
 {showScrollDown && (
   <button

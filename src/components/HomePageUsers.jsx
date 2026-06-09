@@ -312,7 +312,7 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
         <div className={`w-[50px] h-[50px] rounded-[10px] flex items-center justify-center text-white font-bold text-[15px] font-['Outfit',sans-serif] shrink-0 relative tracking-[0.3px] overflow-hidden ${c.type === "group" ? "bg-gradient-to-br from-[#9ca3af] to-[#6b7280]" : "bg-gradient-to-br from-[#f47f7f] to-[#d95f5f]"}`}>
           {c.type === "group"
             ? c.group_image
-              ? <img src={c.group_image} alt="Group" className="w-full h-full object-cover" />
+              ? <img src={c.group_image.startsWith("http") ? c.group_image : `${API_URL.replace('/api', '')}${c.group_image}`} alt="Group" className="w-full h-full object-cover" />
               : <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
             : c.profile_image
               ? <img src={c.profile_image} alt="Profile" className="w-full h-full object-cover" />
