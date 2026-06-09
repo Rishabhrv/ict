@@ -80,43 +80,54 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage, scrollToMessageI
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [otherUserStatus, setOtherUserStatus] = useState({ isOnline: false, lastSeen: null });
+  const [isChatReady, setIsChatReady] = useState(false);
 
-  // ✅ Jump to a message from chat search
-useEffect(() => {
-  if (!scrollToMessageId || !conversation) return;
-  let cancelled = false;
+// ✅ Jump to a message from chat search
+  useEffect(() => {
+    if (!scrollToMessageId || !conversation) return;
+    let cancelled = false;
+    
+    setIsChatReady(false); // 👈 Hide chat while searching for target message
 
-  // Wait for the initial message fetch (triggered by conversation change) to finish
-  const timer = setTimeout(() => {
-    if (cancelled) return;
-    const found = messages.find(m => m.id === scrollToMessageId);
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      const found = messages.find(m => m.id === scrollToMessageId);
 
-    if (found) {
-      scrollToMessage(scrollToMessageId);
-      onScrollComplete?.();
-    } else if (messages.length > 0) {
-      // Message not in the current page — fetch context around it
-      fetch(`${API_URL}/messages/${conversation.id}/context/${scrollToMessageId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (cancelled || !Array.isArray(data) || !data.length) return;
-          setMessages(data);
-          setOffset(data.length);
-          setHasMore(true);
-          setTimeout(() => {
-            if (cancelled) return;
-            scrollToMessage(scrollToMessageId);
-            onScrollComplete?.();
-          }, 200);
+      if (found) {
+        scrollToMessage(scrollToMessageId);
+        onScrollComplete?.();
+        setIsChatReady(true); // 👈 Show chat!
+      } else {
+        // Message not in the current page — fetch context around it
+        fetch(`${API_URL}/messages/${conversation.id}/context/${scrollToMessageId}`, {
+          headers: { Authorization: `Bearer ${token}` },
         })
-        .catch(console.error);
-    }
-  }, 450);
+          .then(r => r.json())
+          .then(data => {
+            if (cancelled) return;
+            if (!Array.isArray(data) || !data.length) {
+               setIsChatReady(true); // fallback
+               return;
+            }
+            setMessages(data);
+            setOffset(data.length);
+            setHasMore(true);
+            setTimeout(() => {
+              if (cancelled) return;
+              scrollToMessage(scrollToMessageId);
+              onScrollComplete?.();
+              setIsChatReady(true); // 👈 Show chat after jumping!
+            }, 200);
+          })
+          .catch((err) => {
+             console.error(err);
+             setIsChatReady(true);
+          });
+      }
+    }, 450);
 
-  return () => { cancelled = true; clearTimeout(timer); };
-}, [scrollToMessageId, conversation?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [scrollToMessageId, conversation, token, messages, onScrollComplete]);
 
 
   const formatLastSeen = (dateString) => {
@@ -535,28 +546,26 @@ const handleFileChange = (e) => {
   const files = Array.from(e.target.files);
   if (!files.length) return;
 
-  // 🔥 Check each file size
   for (const file of files) {
     if (file.size > MAX_FILE_SIZE) {
       showErrorPopup("File size exceeded! Max allowed is 100MB ❌");
-      e.target.value = ""; // reset input
+      e.target.value = "";
       return;
     }
   }
 
-  // ✅ Max 10 files rule
-if (files.length > MAX_FILES) {
-  showErrorPopup(`You can only send ${MAX_FILES} files at a time!`);
-  return;
-}
+  if (files.length > MAX_FILES) {
+    showErrorPopup(`You can only send ${MAX_FILES} files at a time!`);
+    return;
+  }
 
-if (pendingFiles.length + files.length > MAX_FILES) {
-  showErrorPopup(`Maximum ${MAX_FILES} files allowed at a time!`);
-  return;
-}
-
+  if (pendingFiles.length + files.length > MAX_FILES) {
+    showErrorPopup(`Maximum ${MAX_FILES} files allowed at a time!`);
+    return;
+  }
 
   setPendingFiles((prev) => [...prev, ...files]);
+  setTimeout(() => textareaRef.current?.focus(), 0); // ← add this
 };
 
 
@@ -593,14 +602,14 @@ const handleDrop = (e) => {
   }
 
   const validFiles = files.filter((file) => file instanceof File);
-  
+
   if (pendingFiles.length + validFiles.length > MAX_FILES) {
     showErrorPopup(`Maximum ${MAX_FILES} files allowed at a time!`);
     return;
   }
-  
-  setPendingFiles((prev) => [...prev, ...validFiles]);
 
+  setPendingFiles((prev) => [...prev, ...validFiles]);
+  setTimeout(() => textareaRef.current?.focus(), 0); // ← add this
 };
 
 
@@ -668,17 +677,6 @@ useEffect(() => {
 }, [conversation, token]);
 
 
-  // ✅ Auto-scroll when new messages arrive
-useEffect(() => {
-  if (!messagesRef.current) return;  // ✅ Prevent crash
-
-  if (offset === 0) {
-    setTimeout(() => {
-      if (!messagesRef.current) return; // double safety
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }, 20);
-  }
-}, [messages, offset]);
 
   const scrollToBottom = () => {
     messagesRef.current.scrollTo({
@@ -772,41 +770,57 @@ const formatFileSize = (bytes) => {
 
 
 useEffect(() => {
-  if (!conversation) return;
+    if (!conversation) return;
 
-  // ⭐ MUST RESET STATE WHEN SWITCHING CHAT
-  setMessages([]);
-  setOffset(0);
-  setHasMore(true);
-  setMultiSelectMode(false);
-  setSelectedMessages([]);
+    // ⭐ MUST RESET STATE WHEN SWITCHING CHAT
+    setMessages([]);
+    setOffset(0);
+    setHasMore(true);
+    setMultiSelectMode(false);
+    setSelectedMessages([]);
+    
+    setIsChatReady(false); // 👈 Hide chat immediately on switch
 
-  const loadInitialMessages = async () => {
-    try {
-      const res = await fetch(
-        `${API_URL}/messages/${conversation.id}?limit=${LIMIT}&offset=0`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+    const loadInitialMessages = async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/messages/${conversation.id}?limit=${LIMIT}&offset=0`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
 
-      const data = await res.json();
-      const safeData = Array.isArray(data) ? data : [];
+        const data = await res.json();
+        const safeData = Array.isArray(data) ? data : [];
 
-      setMessages(safeData);
+        setMessages(safeData);
 
-      // ⭐ Update offset based on first load
-      setOffset(safeData.length);
+        // ⭐ Update offset based on first load
+        setOffset(safeData.length);
 
-      // ⭐ If less than LIMIT messages → no more messages → hide button
-      if (safeData.length < LIMIT) {
-        setHasMore(false);
+        // ⭐ If less than LIMIT messages → no more messages → hide button
+        if (safeData.length < LIMIT) {
+          setHasMore(false);
+        }
+
+        // ✅ Wait for DOM to render, force scroll to bottom, THEN reveal
+        setTimeout(() => {
+          if (messagesRef.current && !scrollToMessageId) {
+            messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+            setIsChatReady(true); // 👈 Reveal the chat!
+          } else if (!scrollToMessageId) {
+            setIsChatReady(true); // Fallback
+          }
+          // If scrollToMessageId IS present, we don't reveal here. 
+          // We let the scrollToMessageId useEffect reveal it after the jump.
+        }, 150);
+
+      } catch (err) {
+        console.error("Initial load error:", err);
+        setIsChatReady(true); // Reveal on error to prevent being stuck
       }
-    } catch (err) {
-      console.error("Initial load error:", err);
-    }
-  };
+    };
 
-  loadInitialMessages();
-}, [conversation, token]);
+    loadInitialMessages();
+  }, [conversation, token,scrollToMessageId]); // 👈 Notice I removed scrollToMessageId from this array
 
 
 
@@ -885,6 +899,12 @@ if (pendingFiles.length > 0) {
 
   setPendingFiles([]); // clear preview
   setIsUploading(false);
+  
+  setTimeout(() => {
+      if (messagesRef.current) {
+        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+      }
+    }, 20);
 }
 
 
@@ -1248,6 +1268,8 @@ const handleBulkDeleteConfirmed = async () => {
           </div>
         </div>
 
+
+
         {dragActive && (
           <div 
             className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 pointer-events-none"
@@ -1299,6 +1321,13 @@ const handleBulkDeleteConfirmed = async () => {
     </div>
   </div>
 )}
+
+
+          {!isChatReady && (
+            <div className="fixed left-100 inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-[2px]">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-red-100 border-t-[#f47f7f]"></div>
+            </div>
+          )}
 
 
       {/* Messages */}
@@ -1523,15 +1552,15 @@ const handleBulkDeleteConfirmed = async () => {
                           <div
                           className={`w-fit shadow-lg max-w-xl px-[4px] py-[3px] rounded-xl  ${
                             mine
-                              ? "bg-[#f37c7c] text-white rounded-br-sm ml-15 ml-auto"
+                              ? "bg-white text-gray-900 rounded-br-sm ml-15 ml-auto"
                               : "bg-white text-gray-900 rounded-bl-sm"
                           }`}
                         >
 
                           {msg.reply_to && (
                             <div
-                              className={`text-xs mb-1 p-1 rounded-md cursor-pointer hover:bg-gray-100 transition ${
-                                mine ? "border-white bg-white text-red-700" : "border-gray-400 bg-[#f47f7f] text-white"
+                              className={`text-xs mb-1 p-1 rounded-md cursor-pointer  transition ${
+                                mine ? "border-white bg-gray-100 text-red-700 hover:bg-[#ffe1e1]/90" : "border-gray-400 bg-[#f47f7f] text-white hover:bg-[#f47f7f]/90"
                               }`}
                               onClick={() => scrollToMessage(msg.reply_to)}
                             >
@@ -1664,22 +1693,22 @@ const handleBulkDeleteConfirmed = async () => {
                       let iconColor = "text-gray-500";
                       if (["pdf"].includes(ext)) {
                         fileIcon = faFilePdf;
-                        iconColor = "text-red-300";
+                        iconColor = "text-red-400";
                       } else if (["doc", "docx"].includes(ext)) {
                         fileIcon = faFileWord;
-                        iconColor = "text-blue-300";
+                        iconColor = "text-blue-400";
                       } else if (["xls", "xlsx", "csv"].includes(ext)) {
                         fileIcon = faFileExcel;
-                        iconColor = "text-green-300";
+                        iconColor = "text-green-400";
                       } else if (["zip", "rar", "7z"].includes(ext)) {
                         fileIcon = faFileZipper;
-                        iconColor = "text-yellow-300";
+                        iconColor = "text-yellow-400";
                       } else if (["ppt", "pptx"].includes(ext)) {
                         fileIcon = faFilePowerpoint;
-                        iconColor = "text-orange-300";
+                        iconColor = "text-orange-400";
                       } else if (["txt"].includes(ext)) {
                         fileIcon = faFileLines;
-                        iconColor = "text-gray-300";
+                        iconColor = "text-gray-400";
                       }
                         function cleanDisplayName(filename) {
                           if (!filename) return "";
@@ -1687,17 +1716,17 @@ const handleBulkDeleteConfirmed = async () => {
                         }
 
                       return (
-                        <div className="bg-white flex items-center space-x-3 border border-red-200 rounded-lg p-2">
+                        <div className={` flex items-top space-x-3 bg-white  rounded-lg p-2`}>
                           <div className="bg-gray-100 w-8 h-8 flex items-center justify-center rounded-full text-sm">
                             <FontAwesomeIcon icon={fileIcon} className={iconColor} />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs font-medium text-gray-800 w-44 break-words whitespace-normal font-['Outfit',sans-serif]">
+                            <p className={`text-xs font-medium text-gray-800  w-44 break-words whitespace-normal font-['Outfit',sans-serif]`}>
                               {/* Prefer clean name returned by backend */}
                               {fileOriginalName || cleanDisplayName(fileName)}
                             </p>
                             {msg.file_size && (
-                              <p className="text-[10px] text-gray-500">
+                              <p className={`text-[10px] text-gray-600 `}>
                                 {formatFileSize(msg.file_size)}
                               </p>
                             )}
@@ -1708,7 +1737,7 @@ const handleBulkDeleteConfirmed = async () => {
                                 a.download = fileOriginalName || cleanDisplayName(fileName);
                                 a.click();
                               }}
-                              className="text-[10px] text-blue-600 cursor-pointer"
+                              className={`text-[10px] text-blue-600  cursor-pointer`}
                             >
                               Download
                             </button>
@@ -2065,52 +2094,17 @@ const handleBulkDeleteConfirmed = async () => {
               )}
 
 
-            {/* ✅ Show selected files preview before sending */}
-            {pendingFiles.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto mb-2 p-2 bg-gray-100 rounded-md">
-                {pendingFiles.map((file, i) => (
-                  <div key={i} className="relative min-w-[70px] flex flex-col items-center">
-            
-                    {/* PREVIEW IMAGE */}
-                    {file.type.startsWith("image/") ? (
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt="preview"
-                        className="w-14 h-14 object-cover rounded-md border"
-                      />
-                    ) : (
-                      /* FILE ICON */
-                      <div className="w-14 h-14 flex items-center justify-center bg-white border rounded-md">
-                        <FontAwesomeIcon icon={faFile} className="text-gray-500 text-xl" />
-                      </div>
-                    )}
-            
-                    {/* FILE NAME */}
-                    <p className="text-[10px] mt-1 text-center w-[70px] truncate">
-                      {file.name}
-                    </p>
-            
-                    {/* REMOVE BUTTON */}
-                    <button
-                      onClick={() => setPendingFiles(pendingFiles.filter((_, idx) => idx !== i))}
-                      className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 text-xs rounded-full cursor-pointer"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+         {/* ↩️ REPLAYING TO SECTION */}
+            {replyingTo && (
+              <div className="flex items-start justify-between bg-white/95 backdrop-blur-md mx-3 mb-2 px-4 py-2 rounded-2xl shadow-sm border border-gray-100 border-l-[4px] border-l-[#f47f7f]">
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-[11px] font-bold text-[#f47f7f] mb-1">
+                    Replying to {replyingTo.sender_name || replyingTo.reply_to_user || "User"}
+                  </span>
 
-             {replyingTo && (
-              <div className="flex items-center justify-between bg-gray-100 mx-4 mb-1 px-3 py-2 rounded-lg border-l-4 border-[#f37c7c]">
-                <div className="flex flex-col min-w-0">
-            
-                  <span className="text-xs font-semibold text-gray-600">Replying to:</span>
-            
                   {(() => {
                     const replyText = replyingTo.message || replyingTo.text || "";
-            
+
                     // 🖼️ IMAGE DETECTION
                     if (
                       replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i) ||
@@ -2119,16 +2113,17 @@ const handleBulkDeleteConfirmed = async () => {
                         replyText.match(/\.(jpeg|jpg|png|gif|webp)$/i))
                     ) {
                       return (
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-3 mt-1">
                           <img
                             src={replyText}
                             alt="reply-img"
-                            className="w-12 h-8 rounded object-cover"
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm"
                           />
+                          <span className="text-xs text-gray-500 font-medium italic">Photo</span>
                         </div>
                       );
                     }
-            
+
                     // 📎 FILE DETECTION
                     if (
                       replyText.match(/\.(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i) ||
@@ -2138,39 +2133,80 @@ const handleBulkDeleteConfirmed = async () => {
                     ) {
                       const fileName = replyText.split("/").pop();
                       const ext = fileName.split(".").pop().toLowerCase();
-            
-                      let fileIcon = "📎";
-                      if (["pdf"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePdf} />;
-                      else if (["doc", "docx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileWord} />;
-                      else if (["xls", "xlsx", "csv"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileExcel} />;
-                      else if (["ppt", "pptx"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFilePowerpoint} />;
-                      else if (["zip", "rar", "7z"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFileZipper} />;
-                      else if (["txt"].includes(ext)) fileIcon = <FontAwesomeIcon icon={faFile} />;
-            
+
+                      let fileIcon = faFile;
+                      let iconColor = "text-gray-400";
+                      if (["pdf"].includes(ext)) { fileIcon = faFilePdf; iconColor = "text-red-400"; }
+                      else if (["doc", "docx"].includes(ext)) { fileIcon = faFileWord; iconColor = "text-blue-400"; }
+                      else if (["xls", "xlsx", "csv"].includes(ext)) { fileIcon = faFileExcel; iconColor = "text-green-400"; }
+                      else if (["ppt", "pptx"].includes(ext)) { fileIcon = faFilePowerpoint; iconColor = "text-orange-400"; }
+                      else if (["zip", "rar", "7z"].includes(ext)) { fileIcon = faFileZipper; iconColor = "text-yellow-400"; }
+                      else if (["txt"].includes(ext)) { fileIcon = faFileLines; iconColor = "text-gray-500"; }
+
                       return (
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[14px] text-gray-700">{fileIcon}</span>
-                          <span className="text-sm text-gray-800 truncate max-w-[200px]">{fileName}</span>
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center">
+                            <FontAwesomeIcon icon={fileIcon} className={`text-sm ${iconColor}`} />
+                          </div>
+                          <span className="text-xs font-medium text-gray-700 truncate max-w-[200px]">
+                            {fileName}
+                          </span>
                         </div>
                       );
                     }
-            
-                    // 💬 TEXT fallback
+
+                    // 💬 TEXT FALLBACK
                     return (
-                      <span className="text-xs text-gray-800 truncate max-w-[250px]">
-                        {replyText.length > 80 ? replyText.slice(0, 80) + "..." : replyText}
+                      <span className="text-xs text-gray-600 line-clamp-2 pr-4 leading-relaxed">
+                        {replyText}
                       </span>
                     );
                   })()}
-            
                 </div>
-            
+
+                {/* Close Button */}
                 <button
                   onClick={() => setReplyingTo(null)}
-                  className="text-gray-500 hover:text-red-500 text-lg"
+                  className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-[#f47f7f] transition-colors ml-2"
                 >
-                  ✕
+                  <FontAwesomeIcon icon={faTimes} className="text-sm" />
                 </button>
+              </div>
+            )}
+
+            {/* 📎 PENDING FILES PREVIEW */}
+            {pendingFiles.length > 0 && (
+              <div className="flex gap-4 overflow-x-auto bg-white/95 backdrop-blur-md mx-3 mb-2 px-4 py-2 rounded-2xl shadow-sm border border-gray-100 border-l-[4px] border-l-[#f47f7f] hide-scrollbar">
+                {pendingFiles.map((file, i) => (
+                  <div key={i} className="relative min-w-[64px] flex flex-col items-center group">
+                    
+                    {/* PREVIEW IMAGE OR ICON */}
+                    {file.type.startsWith("image/") ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt="preview"
+                        className="w-14 h-14 object-cover rounded-xl border border-gray-200 shadow-sm"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-xl shadow-sm">
+                        <FontAwesomeIcon icon={faFile} className="text-[#f47f7f] text-xl" />
+                      </div>
+                    )}
+
+                    {/* FILE NAME */}
+                    <p className="text-[10px] mt-1.5 text-gray-500 text-center w-[64px] truncate font-medium">
+                      {file.name}
+                    </p>
+
+                    {/* REMOVE BUTTON */}
+                    <button
+                      onClick={() => setPendingFiles(pendingFiles.filter((_, idx) => idx !== i))}
+                      className="absolute -top-2 -right-2 bg-[#ff4b4b] text-white w-[20px] h-[20px] flex items-center justify-center text-[10px] rounded-full cursor-pointer shadow-md border-2 border-white hover:scale-110 transition-transform"
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
