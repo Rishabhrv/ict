@@ -177,7 +177,15 @@ function renderItem(item) {
           item.type === "group" ? "bg-gray-400" : "bg-gradient-to-br from-[#f47f7f] to-[#d95f5f]"
         }`}>
           {item.image ? (
-            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+            <img 
+              src={
+                item.image.startsWith("http") || item.image.startsWith("/static/") || item.image.startsWith("data:")
+                  ? item.image 
+                  : `${API_URL.replace('/api', '')}${item.image.startsWith('/') ? '' : '/'}${item.image}`
+              } 
+              alt={item.name} 
+              className="w-full h-full object-cover" 
+            />
           ) : item.type === "group" ? (
             <FontAwesomeIcon icon={faUsers} className="text-[13px]" />
           ) : (

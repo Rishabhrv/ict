@@ -899,7 +899,7 @@ if (pendingFiles.length > 0) {
 
   setPendingFiles([]); // clear preview
   setIsUploading(false);
-  
+
   setTimeout(() => {
       if (messagesRef.current) {
         messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
@@ -1418,7 +1418,7 @@ const handleBulkDeleteConfirmed = async () => {
                   <div
                     key={idx}
                     ref={(el) => { messageRefs.current[msg.id] = el }}
-                    className={`flex ${mine ? "justify-end" : "justify-start"} mb-2 group relative 
+                    className={`flex ${mine ? "justify-end" : "justify-start"} my-3 group relative 
                       ${selectedMessages.includes(msg.id) ? "bg-[#ffe8e8] rounded-lg" : ""}`}
                     onClick={(e) => {
                       if (multiSelectMode) {
@@ -1548,14 +1548,14 @@ const handleBulkDeleteConfirmed = async () => {
                           }
                       
                             {/* 🕹 Three-dot menu (visible on hover) */}
-                            
-                          <div
-                          className={`w-fit shadow-lg max-w-xl px-[4px] py-[3px] rounded-xl  ${
+
+                        <div className={`w-fit shadow-lg max-w-xl px-[4px] py-[3px] rounded-xl ${
                             mine
-                              ? "bg-white text-gray-900 rounded-br-sm ml-15 ml-auto"
-                              : "bg-white text-gray-900 rounded-bl-sm"
-                          }`}
-                        >
+                              ? "bg-white text-gray-700 rounded-br-sm ml-15 ml-auto"
+                              : "bg-white text-gray-700 rounded-bl-sm"
+                          }`}>
+                            
+                          <div >
 
                           {msg.reply_to && (
                             <div
@@ -1716,32 +1716,34 @@ const handleBulkDeleteConfirmed = async () => {
                         }
 
                       return (
-                        <div className={` flex items-top space-x-3 bg-white  rounded-lg p-2`}>
-                          <div className="bg-gray-100 w-8 h-8 flex items-center justify-center rounded-full text-sm">
+                        <div className={` flex items-top space-x-3 bg-gray-100  rounded-lg p-2`}>
+                          <div className="bg-white w-8 h-8 flex items-center justify-center rounded-full text-sm">
                             <FontAwesomeIcon icon={fileIcon} className={iconColor} />
                           </div>
                           <div className="flex-1">
-                            <p className={`text-xs font-medium text-gray-800  w-44 break-words whitespace-normal font-['Outfit',sans-serif]`}>
+                            <p className={`text-xs font-medium text-gray-800  w-34 break-words whitespace-normal font-['Outfit',sans-serif]`}>
                               {/* Prefer clean name returned by backend */}
                               {fileOriginalName || cleanDisplayName(fileName)}
                             </p>
                             {msg.file_size && (
-                              <p className={`text-[10px] text-gray-600 `}>
+                              <p className={`text-[9px] text-gray-600 `}>
                                 {formatFileSize(msg.file_size)}
                               </p>
                             )}
-                            <button
+                          </div>
+                          <button
                               onClick={() => {
                                 const a = document.createElement("a");
                                 a.href = fileUrl;
                                 a.download = fileOriginalName || cleanDisplayName(fileName);
                                 a.click();
                               }}
-                              className={`text-[10px] text-blue-600  cursor-pointer`}
+                              className={`cursor-pointer`}
                             >
-                              Download
+                              <div className="bg-white p-2 rounded-full  hover:bg-gray-50 transition-colors">
+                                <ArrowDown className="text-red-500 w-4 h-4" />
+                              </div>
                             </button>
-                          </div>
                         </div>
                             );
                           } else {
@@ -1763,7 +1765,7 @@ const handleBulkDeleteConfirmed = async () => {
                                     {hasMore ? (
                                       <div className="text-right">
                                         <button
-                                        className={` ${mine ? `text-white` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
+                                        className={` ${mine ? `text-red-500` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
                                         onClick={() =>
                                           setExpandedWords((prev) => ({
                                             ...prev,
@@ -1778,7 +1780,7 @@ const handleBulkDeleteConfirmed = async () => {
                                     ) : fullText.split(/\s+/).length > 100 ? (
                                       <div className="text-right">
                                         <button
-                                        className={` ${mine ? `text-white` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
+                                        className={` ${mine ? `text-red-500` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
                                           onClick={() =>
                                             setExpandedWords((prev) => ({
                                               ...prev,
@@ -1802,7 +1804,34 @@ const handleBulkDeleteConfirmed = async () => {
                         })()}
                     </div>
 
-                          {
+                         
+
+                   <div className={`flex  ${mine ? "justify-end" : "justify-end"}`}>
+                      <p className={`text-[10px] p-1 text-black ${mine ? "text-right" : "text-left"}`}>
+                        {(() => {
+                          const ts = msg.timestamp;
+                          const match = ts?.match(/\d{2}:\d{2}:\d{2}/);
+                          if (!match) return "";
+                          const [h, m] = match[0].split(":").map(Number);
+                          let hours = h;
+                          const ampm = hours >= 12 ? "PM" : "AM";
+                          hours = hours % 12 || 12;
+                          return `${hours.toString().padStart(2, "0")}:${m
+                            .toString()
+                            .padStart(2, "0")} ${ampm}`;
+                        })()}
+                      </p>
+                      {mine ? 
+                      <p className="mt-auto">
+                        <CheckCheck className={`w-[50%] h-[50%] py-1 ${
+                          msg.seen === 1 ? "text-blue-500 " : "text-gray-400"
+                        }`}/>
+                      </p>
+                      : ""}
+                    </div>
+
+                  </div>
+                   {
                             mine ? 
                             <></>
                             :
@@ -1826,8 +1855,7 @@ const handleBulkDeleteConfirmed = async () => {
                                 )}
                               </div>
                           }
-
-                          {/* 📋 Popup Menu */}
+                     {/* 📋 Popup Menu */}
                     {!mine && showMenu === msg.id && (
                       <div
                         ref={menuRef}
@@ -1917,47 +1945,23 @@ const handleBulkDeleteConfirmed = async () => {
                     </div>
                   )}
 
+                    </div>
+                   
 
-                        </div>
-                        
+                    {reactions[msg.id]?.length > 0 && (
+                      <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+                        {reactions[msg.id].map((emoji, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                            // onClick={() => handleAddReaction(msg.id, emoji)} // toggle off
+                          >
+                            <span>{emoji}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                        
-                      {reactions[msg.id]?.length > 0 && (
-                        <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
-                          {reactions[msg.id].map((emoji, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-1 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 text-sm shadow-sm cursor-pointer hover:scale-110 transition-transform"
-                              // onClick={() => handleAddReaction(msg.id, emoji)} // toggle off
-                            >
-                              <span>{emoji}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                  <div className={`flex  ${mine ? "justify-end" : ""}`}>
-                    <p className={`text-[11px] pt-1 text-black ${mine ? "text-right" : "text-left"}`}>
-                      {(() => {
-                        const ts = msg.timestamp;
-                        const match = ts?.match(/\d{2}:\d{2}:\d{2}/);
-                        if (!match) return "";
-                        const [h, m] = match[0].split(":").map(Number);
-                        let hours = h;
-                        const ampm = hours >= 12 ? "PM" : "AM";
-                        hours = hours % 12 || 12;
-                        return `${hours.toString().padStart(2, "0")}:${m
-                          .toString()
-                          .padStart(2, "0")} ${ampm}`;
-                      })()}
-                    </p>
-                    {mine ? 
-                    <p className="mt-auto">
-                      <CheckCheck className={`w-[70%] h-[60%] pl-1 ${
-                        msg.seen === 1 ? "text-blue-500 " : "text-gray-400"
-                      }`}/>
-                    </p>
-                    : ""}
-                  </div>
                 </div>
                 </div>
               </div>

@@ -27,6 +27,7 @@ import profile17 from "./Images/Profile/profile17.jpg";
 import profile18 from "./Images/Profile/profile18.jpg";
 import profile19 from "./Images/Profile/profile19.jpg";
 import profile20 from "./Images/Profile/profile20.jpg";
+import profile21 from "./Images/Profile/profile21.jpg";
 
 // ✅ 2. Use the imported variables in your array (No quotes!)
 const PRESET_AVATARS = [
@@ -49,7 +50,8 @@ const PRESET_AVATARS = [
   profile17,
   profile18,
   profile19,
-  profile20
+  profile20,
+  profile21
 ];
 
 const Slidebar = ({ user, token }) => {
@@ -66,6 +68,14 @@ const Slidebar = ({ user, token }) => {
   const userInitials = user?.username ? user.username.slice(0, 2).toUpperCase() : "SH";
   const API_URL = process.env.REACT_APP_API_URL;
   const [popupChecked, setPopupChecked] = useState(false);
+  const [showPopup, setShowPopup] = useState(false); 
+  const [popupMsg, setPopupMsg] = useState("");
+
+  const showToast = (message) => {
+    setPopupMsg(message);
+    setShowPopup(true);
+    setTimeout(() => setShowPopup(false), 3000); // Auto-hide after 3 seconds
+  };
 
   // Sync state if user prop updates later on re-fetches
   useEffect(() => {
@@ -91,7 +101,7 @@ const Slidebar = ({ user, token }) => {
   }, [user.id, API_URL, token]);
 
   // ✅ 2. Handle PRESET image selection
-  const handlePresetSelection = async (avatarUrl) => {
+const handlePresetSelection = async (avatarUrl) => {
     setIsUploading(true);
     try {
       const res = await fetch(`${API_URL}/set_preset_avatar`, {
@@ -106,20 +116,26 @@ const Slidebar = ({ user, token }) => {
       if (data.success) {
         setProfileImage(data.profile_image);
       } else {
-        alert(data.error || "Failed to update avatar");
+        showToast(data.error || "Failed to update avatar"); // ✅ Replaced alert
       }
     } catch (err) {
       console.error("Error setting preset avatar:", err);
-      alert("Failed to update avatar.");
+      showToast("Failed to update avatar."); // ✅ Replaced alert
     } finally {
       setIsUploading(false);
     }
   };
 
-  // ✅ 3. Handle CUSTOM FILE upload
-  const handleImageUpload = async (e) => {
+const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Strict Image Validation
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select only image files (JPG, PNG, GIF) ❌");
+      e.target.value = "";
+      return;
+    }
 
     setIsUploading(true);
     const formData = new FormData();
@@ -135,12 +151,13 @@ const Slidebar = ({ user, token }) => {
       const data = await res.json();
       if (data.success) {
         setProfileImage(data.profile_image); 
+        showToast("Profile image updated! ✅"); // ✅ Success Toast
       } else {
-        alert(data.error || "Upload failed");
+        showToast(data.error || "Upload failed"); // ✅ Replaced alert
       }
     } catch (err) {
       console.error("Upload error:", err);
-      alert("Failed to upload image.");
+      showToast("Failed to upload image."); // ✅ Replaced alert
     } finally {
       setIsUploading(false);
       e.target.value = ""; 
@@ -149,7 +166,11 @@ const Slidebar = ({ user, token }) => {
 
   return (
     <div className="w-16 min-w-16 bg-white border-r border-[#ece7e0] flex flex-col items-center pt-[14px] pb-[18px] gap-[6px] h-screen z-20 font-['Plus_Jakarta_Sans',sans-serif]">
-      
+      {showPopup && (
+        <div className="fixed top-5 left-1/2 transform -translate-x-1/2 bg-[#333] text-white px-6 py-3 rounded-lg shadow-2xl z-[9999] animate-in fade-in slide-in-from-top-2 duration-300 text-sm font-medium">
+          {popupMsg}
+        </div>
+      )}
       {/* TOP LOGO */}
       <div className="w-[45px] h-[45px] rounded-[13px] bg-gradient-to-br from-[#f47f7f] to-[#d95f5f] flex items-center justify-center mb-[14px] shrink-0 shadow-[0_6px_18px_rgba(243,124,124,0.30),0_2px_4px_rgba(200,80,80,0.12)]">
         <img src={Logo} alt="Logo" className="p-1" />
@@ -196,7 +217,7 @@ const Slidebar = ({ user, token }) => {
       {/* ✅ User Profile Popup Modal */}
       {showProfilePopup && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-[2px]">
-          <div className="bg-white w-[340px] rounded-[20px] p-7 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+          <div className="bg-white w-[540px] rounded-[20px] p-7 shadow-2xl relative animate-in fade-in zoom-in duration-200">
             
             <button 
               onClick={() => setShowProfilePopup(false)} 
@@ -235,14 +256,14 @@ const Slidebar = ({ user, token }) => {
                 Select an Avatar
               </label>
               
-             <div className="grid grid-cols-5 gap-3 mb-4 w-fit mx-auto">
+             <div className="grid grid-cols-7 gap-3 mb-4 w-fit mx-auto">
                 {PRESET_AVATARS.map((avatar, idx) => (
                   <img 
                     key={idx}
                     src={avatar}
                     alt={`preset-${idx}`}
                     onClick={() => !isUploading && handlePresetSelection(avatar)}
-                    className={`w-10 h-10 rounded-full cursor-pointer hover:scale-110 hover:shadow-md transition-all border-2 border-transparent hover:border-[#f47f7f] ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`w-15 h-15 rounded-full cursor-pointer hover:scale-110 hover:shadow-md transition-all border-2 border-transparent hover:border-[#f47f7f] ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   />
                 ))}
               </div>

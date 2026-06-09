@@ -1411,13 +1411,13 @@ const handleBulkDeleteConfirmed = async () => {
 
                                 : <></>
                               }
-                              
-                            <div
-                            className={`w-fit max-w-xl px-1 py-1 rounded-xl shadow-xl ${
-                              mine ? "bg-white text-gray-900 rounded-br-sm ml-auto" : "bg-white text-gray-900 rounded-bl-sm"
-                            }`}
-                            
-                          >
+
+                            <div className={`max-w-xl px-1 py-1 rounded-xl shadow-xl ${
+                                  mine ? "bg-white text-gray-900 rounded-br-sm ml-auto" : "bg-white text-gray-900 rounded-bl-sm"
+                                }`}>                             
+                              <div
+                                className={`w-fit `}                            
+                              >
                             {msg.reply_to && (
                               <div
                                 className={`text-xs mb-1 p-1 rounded-md cursor-pointer transition ${
@@ -1538,20 +1538,22 @@ const handleBulkDeleteConfirmed = async () => {
                               else if (["txt"].includes(ext)) { fileIcon = faFileLines; iconColor = "text-gray-400"; }
 
                               return (
-                                <div className="bg-white flex items-center space-x-3 rounded-lg p-2  transition">
-                                  <div className="bg-gray-100 w-9 h-9 flex items-center justify-center rounded-full">
+                                <div className="bg-gray-100 flex items-center space-x-3 rounded-lg p-2  transition">
+                                  <div className="bg-white w-9 h-9 flex items-center justify-center rounded-full">
                                     <FontAwesomeIcon icon={fileIcon} className={`${iconColor} text-lg`} />
                                   </div>
                                   <div className="flex-1">
-                                    <p className="text-xs font-medium text-gray-800 w-44 break-words whitespace-normal">
+                                    <p className="text-xs font-medium text-gray-800 w-34 break-words whitespace-normal">
                                       {fileName}
                                     </p>
                                     {msg.file_size && (
-                                      <p className="text-[10px] text-gray-500">
+                                      <p className="text-[9px] text-gray-500">
                                         {formatFileSize(msg.file_size)}
                                       </p>
                                     )}
-                                    <button
+                                    
+                                  </div>
+                                  <button
                                       onClick={() => {
                                         const a = document.createElement("a");
                                         a.href = fileUrl;
@@ -1562,9 +1564,10 @@ const handleBulkDeleteConfirmed = async () => {
                                       }}
                                       className="text-[11px] text-blue-600 hover:underline cursor-pointer"
                                     >
-                                      Download
+                                      <div className="bg-white p-2 rounded-full  hover:bg-gray-50 transition-colors">
+                                                                      <ArrowDown className="text-red-500 w-4 h-4" />
+                                                                    </div>
                                     </button>
-                                  </div>
                                 </div>
                               );
                             })()
@@ -1590,7 +1593,7 @@ const handleBulkDeleteConfirmed = async () => {
                                     {hasMore ? (
                                       <div className="text-right">
                                         <button
-                                        className={` ${mine ? `text-white` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
+                                        className={` ${mine ? `text-red-500` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
                                         onClick={() =>
                                           setExpandedWords((prev) => ({
                                             ...prev,
@@ -1605,7 +1608,7 @@ const handleBulkDeleteConfirmed = async () => {
                                     ) : fullText.split(/\s+/).length > 100 ? (
                                       <div className="text-right">
                                         <button
-                                        className={` ${mine ? `text-white` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
+                                        className={` ${mine ? `text-red-500` : `text-red-500` } text-sm mt-1 pr-3 font-medium cursor-pointer`}
                                           onClick={() =>
                                             setExpandedWords((prev) => ({
                                               ...prev,
@@ -1625,6 +1628,17 @@ const handleBulkDeleteConfirmed = async () => {
                               </div>
                           }
                         </div>
+                        {/* time + optional seen icon (group doesn't track per-user seen here) */}
+                        <div className={`flex ${mine ? "justify-end" : "justify-end"}`}>
+                          <p className={`text-[10px] p-1 text-black ${mine ? "text-right" : "text-left"}`}>
+                            {formatTime(msg.timestamp)}
+                          </p>
+                        </div>
+                      </div>
+
+
+
+
                         {mine ? <></>
                           :       
                             <div className="flex items-center">
@@ -1722,36 +1736,31 @@ const handleBulkDeleteConfirmed = async () => {
                       </div>
 
                         {/* This is the small chip under the message */}
-{reactions[msg.id]?.length > 0 && (
-  <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
-    <div
-      onClick={(e) => {
-        e.stopPropagation();
-        setReactionInfo({
-          message_id: msg.id,
-          reactions: reactions[msg.id], // This is now an array of objects
-          anchorEl: e.currentTarget,
-          mine,
-        });
-        setActiveReactionTab("all");
-        setShowReactionInfo(true);
-      }}
-      className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full bg-white shadow-sm cursor-pointer"
-    >
-      {/* Access the .emoji property of the first object in the array */}
-      <span>{reactions[msg.id][0].emoji}</span>
-      <span className="text-xs text-gray-600 font-medium">
-        {reactions[msg.id].length}
-      </span>
-    </div>
-  </div>
-)}
-                        {/* time + optional seen icon (group doesn't track per-user seen here) */}
-                        <div className={`flex ${mine ? "justify-end" : ""}`}>
-                          <p className={`text-[11px] pt-1 text-black ${mine ? "text-right" : "text-left"}`}>
-                            {formatTime(msg.timestamp)}
-                          </p>
-                        </div>
+                        {reactions[msg.id]?.length > 0 && (
+                          <div className={`flex gap-1 mt-1 ${mine ? "justify-end" : "justify-start"}`}>
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReactionInfo({
+                                  message_id: msg.id,
+                                  reactions: reactions[msg.id], // This is now an array of objects
+                                  anchorEl: e.currentTarget,
+                                  mine,
+                                });
+                                setActiveReactionTab("all");
+                                setShowReactionInfo(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full bg-white shadow-sm cursor-pointer"
+                            >
+                              {/* Access the .emoji property of the first object in the array */}
+                              <span>{reactions[msg.id][0].emoji}</span>
+                              <span className="text-xs text-gray-600 font-medium">
+                                {reactions[msg.id].length}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        
                       </div>
                     </div>
                   </div>
@@ -2057,7 +2066,7 @@ const handleBulkDeleteConfirmed = async () => {
         <div key={i} className="flex justify-between text-sm py-1">
           <span>{u.username}</span>
 
-          <span className="text-gray-500 whitespace-nowrap">
+          <span className="text-gray-500 whitespace-nowrap text-[10px]">
             {(() => {
               if (!u.seen_at) return "--:--";
           
