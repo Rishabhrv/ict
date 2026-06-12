@@ -61,6 +61,7 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage, scrollToMes
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const textareaRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const [showFormatBar, setShowFormatBar] = useState(false);
   const [formatBarPos, setFormatBarPos] = useState({ top: 0, left: 0 });
   const [expandedWords, setExpandedWords] = useState({});
@@ -75,6 +76,7 @@ const HomePageGroupMsg = ({ token, conversation, user, onNewMessage, scrollToMes
   const [activeReactionTab, setActiveReactionTab] = useState("all");
   const onNewMessageRef = useRef(onNewMessage);
   const [isChatReady, setIsChatReady] = useState(false);
+  
     
   
   
@@ -137,21 +139,22 @@ const validateAndAddFiles = useCallback((files) => {
 }, []);
 
 
-
-  
-    useEffect(() => {
-      function handleClickOutside(e) {
-        if (menuRef.current && !menuRef.current.contains(e.target)) {
-          setShowMenu(null); // 👈 CLOSE MENU
-        }
+  useEffect(() => {
+    function handleClickOutsideEmoji(e) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
       }
+    }
+
+    // Only attach the listener if the picker is actually open
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutsideEmoji);
+    }
     
-      document.addEventListener("mousedown", handleClickOutside);
-    
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }, []);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutsideEmoji);
+    };
+  }, [showEmojiPicker]);
 
 useEffect(() => {
     if (!token) return;
@@ -173,6 +176,7 @@ useEffect(() => {
         reply_to: msg.reply_to || null,
         reply_to_user: msg.reply_to_user || null,
         reply_to_text: msg.reply_to_text || null,
+        original_name: msg.original_name || null, 
       };
 
       setMessages((prev) => [
@@ -309,6 +313,8 @@ useEffect(() => {
   if (!scrollToMessageId || !GROUP_ID) return;
   let cancelled = false;
 
+  setIsChatReady(false); // 👈 1. Hide chat while searching for target message
+
   const timer = setTimeout(() => {
     if (cancelled) return;
     const found = messages.find(m => m.id === scrollToMessageId);
@@ -316,13 +322,20 @@ useEffect(() => {
     if (found) {
       scrollToMessage(scrollToMessageId);
       onScrollComplete?.();
-    } else if (messages.length > 0) {
+      setIsChatReady(true); // 👈 2. Show chat if message is already loaded!
+    } else {
+      // Message not in the current page — fetch context around it
       fetch(`${API_URL}/group_messages/${GROUP_ID}/context/${scrollToMessageId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
         .then(data => {
-          if (cancelled || !Array.isArray(data) || !data.length) return;
+          if (cancelled) return;
+          if (!Array.isArray(data) || !data.length) {
+              setIsChatReady(true); // 👈 3. Reveal chat even if nothing is found (fallback)
+              return;
+          }
+          
           const unified = data.map(m => ({
             id: m.id, sender_id: m.sender_id,
             sender_name: m.sender_name || "Unknown",
@@ -335,21 +348,27 @@ useEffect(() => {
             reply_to_user: m.reply_to_user || null,
             original_name: m.original_name || null,
           }));
+          
           setMessages(unified);
           setOffset(unified.length);
           setHasMore(true);
+          
           setTimeout(() => {
             if (cancelled) return;
             scrollToMessage(scrollToMessageId);
             onScrollComplete?.();
+            setIsChatReady(true); // 👈 4. Show chat after successfully jumping!
           }, 200);
         })
-        .catch(console.error);
+        .catch(err => {
+            console.error(err);
+            setIsChatReady(true); // 👈 5. Stop loading even if the API fails
+        });
     }
   }, 450);
 
   return () => { cancelled = true; clearTimeout(timer); };
-}, [scrollToMessageId, GROUP_ID]); // eslint-disable-line react-hooks/exhaustive-deps
+}, [scrollToMessageId, GROUP_ID, messages, token, onScrollComplete]);
 
 
 
@@ -543,7 +562,8 @@ useEffect(() => {
   };
 
   loadInitialMessages();
-}, [GROUP_ID, token, scrollToMessageId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [GROUP_ID, token]);
 
 
 
@@ -660,6 +680,7 @@ const formatFileSize = (bytes) => {
         message: u.url,
         message_type,
         file_size: file.size,
+        original_name: u.original_name || file.name,
       });
     });
 
@@ -949,18 +970,6 @@ const exitMultiSelect = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // auto scroll on new messages (bottom) similar to 1:1
-  useEffect(() => {
-  if (!messagesRef.current) return;
-
-  const isAtBottom =
-    messagesRef.current.scrollHeight - messagesRef.current.scrollTop <=
-    messagesRef.current.clientHeight + 80;
-
-  if (isAtBottom) {
-    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-  }
-}, [messages]);
 
 
 
@@ -1553,14 +1562,22 @@ const handleBulkDeleteConfirmed = async () => {
                                     )}
                                     
                                   </div>
-                                  <button
-                                      onClick={() => {
-                                        const a = document.createElement("a");
-                                        a.href = fileUrl;
-                                        a.download = fileName;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        a.remove();
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const response = await fetch(fileUrl, { mode: "cors" });
+                                          const blob = await response.blob();
+                                          const blobUrl = window.URL.createObjectURL(blob);
+                                          const a = document.createElement("a");
+                                          a.href = blobUrl;
+                                          a.download = fileName;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          a.remove();
+                                          window.URL.revokeObjectURL(blobUrl);
+                                        } catch (error) {
+                                          console.error("Download failed:", error);
+                                        }
                                       }}
                                       className="text-[11px] text-blue-600 hover:underline cursor-pointer"
                                     >
@@ -1943,15 +1960,18 @@ const handleBulkDeleteConfirmed = async () => {
                   />
                 </label>
 
-                <div className="relative">
+                <div className="relative" ref={emojiPickerRef}>
                   <button type="button" onClick={() => setShowEmojiPicker((p) => !p)} className="focus:outline-none">
                     <Smile className="text-gray-600 cursor-pointer mt-1" />
                   </button>
-
+                
                   {showEmojiPicker && (
                     <div className="absolute bottom-10 left-0 z-50">
                       <EmojiPicker
-                        onEmojiClick={(e) => { setInput((prev) => prev + e.emoji); setShowEmojiPicker(false); }}
+                        onEmojiClick={(e) => { 
+                          setInput((prev) => prev + e.emoji); 
+                          setShowEmojiPicker(false); 
+                        }}
                         theme="light"
                       />
                     </div>
