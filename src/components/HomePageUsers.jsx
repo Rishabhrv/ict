@@ -115,6 +115,8 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
     s.on("connect", () => {});
   }, [token]);
 
+  
+
   // Existing: user / group name search
   useEffect(() => {
     if (!searchTerm.trim()) { setSearchResults([]); return; }
@@ -332,14 +334,14 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
                 const s = c.last_sender === user.username ? "You" : c.last_sender;
                 if (!c.last_message) return `${s}: No messages yet`;
                 if (c.last_message_type === "text")  return `${s}: ${c.last_message.replace(/[*_~`]/g,"")}`;
-                if (c.last_message_type === "file")  return <><span className="truncate">{s}: <FontAwesomeIcon icon={faFile} className="text-[#c8bfb8] mr-1"/>{c.last_message.split("/").pop()}</span></>;
-                if (c.last_message_type === "image") return <><span className="truncate">{s}: <FontAwesomeIcon icon={faImage} className="text-[#c8bfb8] mr-1"/>{c.last_message.split("/").pop()}</span></>;
+                if (c.last_message_type === "file")  return <><span className="truncate">{s}: <FontAwesomeIcon icon={faFile} className="text-[#c8bfb8] mr-1"/>{getDisplayFileName(c)}</span></>;
+                if (c.last_message_type === "image") return <><span className="truncate">{s}: <FontAwesomeIcon icon={faImage} className="text-[#c8bfb8] mr-1"/>{getDisplayFileName(c)}</span></>;
                 return `${s}: ${c.last_message.replace(/[*_~`]/g,"")}`;
               }
               if (!c.last_message) return c.email || "No messages yet";
               if (c.last_message_type === "text")  return c.last_message.replace(/[*_~`]/g,"");
-              if (c.last_message_type === "file")  return <><FontAwesomeIcon icon={faFile} className="text-[#c8bfb8]"/><span className="truncate">{c.last_message.split("/").pop()}</span></>;
-              if (c.last_message_type === "image") return <><FontAwesomeIcon icon={faImage} className="text-[#c8bfb8]"/><span className="truncate">{c.last_message.split("/").pop()}</span></>;
+              if (c.last_message_type === "file")  return <><FontAwesomeIcon icon={faFile} className="text-[#c8bfb8]"/><span className="truncate">{getDisplayFileName(c)}</span></>;
+              if (c.last_message_type === "image") return <><FontAwesomeIcon icon={faImage} className="text-[#c8bfb8]"/><span className="truncate">{getDisplayFileName(c)}</span></>;
               return c.last_message;
             })()}
           </div>
@@ -357,6 +359,11 @@ const HomePageUsers = ({ token, onSelectConversation, user, lastMessageUpdate })
         </div>
       </button>
     );
+  };
+
+  const getDisplayFileName = (c) => {
+    if (c.last_message_original_name) return c.last_message_original_name;
+    return c.last_message ? c.last_message.split("/").pop() : "";
   };
 
   // ── RENDER ──────────────────────────────────────────────────────────────────

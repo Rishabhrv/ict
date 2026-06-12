@@ -55,6 +55,7 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage, scrollToMessageI
   const [messageToShare, setMessageToShare] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null);
   const textareaRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const [reactions, setReactions] = useState({});
   const [selectedMsgInfo, setSelectedMsgInfo] = useState(null);
   const [reactionPicker, setReactionPicker] = useState({
@@ -169,19 +170,22 @@ const HomePageMsg = ({ token, conversation, user, onNewMessage, scrollToMessageI
   const menuRef = useRef(null);
   
 
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setShowMenu(null); // 👈 CLOSE MENU
+useEffect(() => {
+    function handleClickOutsideEmoji(e) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
       }
     }
-  
-    document.addEventListener("mousedown", handleClickOutside);
-  
+
+    // Only attach the listener if the picker is actually open
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutsideEmoji);
+    }
+    
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutsideEmoji);
     };
-  }, []);
+  }, [showEmojiPicker]);
 
   const confirmDeleteMessage = async () => {
   setShowConfirm(false);
@@ -343,6 +347,10 @@ const isNearBottom = () => {
   return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
 };
 
+
+
+  
+
 useEffect(() => {
   const s = getSocket();
   if (!s || !token) return;
@@ -467,13 +475,15 @@ useEffect(() => {
       if (!conversation) return;
       if (data.conversation_id !== conversation.id) return;
 
-    
-      // refresh messages to get updated seen values
-      fetch(`${API_URL}/messages/${conversation.id}?limit=50&offset=0`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((updated) => setMessages(updated));
+      // ✅ Update the UI checkmarks directly WITHOUT refetching the newest 50 messages.
+      // This preserves your historical search context!
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.sender_id === user.id && m.seen === 0
+            ? { ...m, seen: 1, seen_time: new Date().toISOString() }
+            : m
+        )
+      );
     });
 
     setMessages((prev) =>
@@ -820,7 +830,8 @@ useEffect(() => {
     };
 
     loadInitialMessages();
-  }, [conversation, token,scrollToMessageId]); // 👈 Notice I removed scrollToMessageId from this array
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation, token]); // 👈 Notice I removed scrollToMessageId from this array
 
 
 
@@ -1163,7 +1174,6 @@ const handleBulkDeleteConfirmed = async () => {
     showErrorPopup("Failed to delete some messages ❌");
   }
 };
-
 
 
 
@@ -1587,7 +1597,7 @@ const handleBulkDeleteConfirmed = async () => {
                                     <img
                                       src={replyText}
                                       alt="reply-img"
-                                      className="w-[100%] h-20 rounded"
+                                      className="w-[100%] h-20 rounded object-cover object-top"
                                     />     
                                   </div>
                                   );
@@ -1731,12 +1741,22 @@ const handleBulkDeleteConfirmed = async () => {
                               </p>
                             )}
                           </div>
-                          <button
-                              onClick={() => {
-                                const a = document.createElement("a");
-                                a.href = fileUrl;
-                                a.download = fileOriginalName || cleanDisplayName(fileName);
-                                a.click();
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch(fileUrl, { mode: "cors" });
+                                  const blob = await response.blob();
+                                  const blobUrl = window.URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = blobUrl;
+                                  a.download = fileOriginalName || cleanDisplayName(fileName);
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  window.URL.revokeObjectURL(blobUrl);
+                                } catch (error) {
+                                  console.error("Download failed:", error);
+                                }
                               }}
                               className={`cursor-pointer`}
                             >
@@ -2238,15 +2258,16 @@ const handleBulkDeleteConfirmed = async () => {
                           />
                         </label>
             
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setShowEmojiPicker((prev) => !prev)}
-                            className="focus:outline-none"
-                          >
-                            <Smile className="text-gray-600 cursor-pointer mt-1" />
-                          </button>
-
+                        {/* ✅ Attach the ref to this wrapper div */}
+                    <div className="relative" ref={emojiPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        className="focus:outline-none"
+                      >
+                        <Smile className="text-gray-600 cursor-pointer mt-1" />
+                      </button>
+                    
                       {showEmojiPicker && (
                         <div className="absolute bottom-10 left-0 z-50">
                           <EmojiPicker
