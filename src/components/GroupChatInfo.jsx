@@ -20,19 +20,21 @@ const GroupChatInfo = ({ token, conversation, user }) => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
-  const [previewImage, setPreviewImage] = useState(null); 
   const storedSession = localStorage.getItem("session_id");
   const [visibleCount, setVisibleCount] = useState(12);
 
-  // ✅ Download Utility
-  const downloadFile = async (url) => {
+  // ✅ Changed from just a URL string to an object to hold the name too
+  const [previewData, setPreviewData] = useState(null); 
+
+  // ✅ Updated to accept and enforce original name
+  const downloadMedia = async (url, originalName) => {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { mode: "cors" });
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = url.split("/").pop() || "image.png";
+      link.download = originalName || url.split("/").pop() || "download";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -125,6 +127,12 @@ const GroupChatInfo = ({ token, conversation, user }) => {
     return faFile;
   };
 
+  // ✅ Clean name helper
+  const cleanDisplayName = (filename) => {
+    if (!filename) return "";
+    return filename.replaceAll("_", " ");
+  };
+
   return (
     <div className="w-[280px] min-w-[280px] bg-white border-l border-[#f2ede8] h-screen flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
       {/* Header */}
@@ -158,28 +166,42 @@ const GroupChatInfo = ({ token, conversation, user }) => {
       <div className="flex-1 overflow-y-auto px-[14px] custom-scrollbar">
         {activeTab === "images" && (
           <div className="grid grid-cols-3 gap-[8px]">
-            {imageFiles.map((file, i) => (
+            {imageFiles.slice(0, visibleCount).map((file, i) => (
               <img 
                 key={i} 
                 src={file.file_url} 
-                alt="Media" 
+                alt={file.original_name || "Media"} 
                 className="w-full h-[75px] object-cover rounded-[10px] cursor-pointer hover:scale-105 transition" 
-                onClick={() => setPreviewImage(file.file_url)} 
+                onClick={() => setPreviewData({ url: file.file_url, name: file.original_name })} 
               />
             ))}
           </div>
         )}
+        
         {activeTab === "docs" && (
           <div className="flex flex-col gap-[8px]">
-            {docFiles.map((file, i) => (
-              <div key={i} className="flex items-center gap-[10px] bg-[#f6f2ee] rounded-[10px] p-[10px]">
-                <div className="w-[34px] h-[34px] rounded-[8px] bg-white flex items-center justify-center text-[#9a9290]">
-                  <FontAwesomeIcon className="text-red-400" icon={getFileIcon(file.file_url)} />
+            {docFiles.slice(0, visibleCount).map((file, i) => {
+              // ✅ Determine display name
+              const fallbackName = file.file_url.split("/").pop();
+              const displayName = file.original_name || cleanDisplayName(fallbackName);
+
+              return (
+                <div key={i} className="flex items-center gap-[10px] bg-[#f6f2ee] rounded-[10px] p-[10px]">
+                  <div className="w-[34px] h-[34px] rounded-[8px] bg-white flex items-center justify-center text-[#9a9290]">
+                    <FontAwesomeIcon className="text-red-400" icon={getFileIcon(file.file_url)} />
+                  </div>
+                  <p className="text-[12px] font-medium text-[#181818] truncate flex-1 font-['Outfit',sans-serif]">
+                    {displayName}
+                  </p>
+                  <button 
+                    onClick={() => downloadMedia(file.file_url, file.original_name)} 
+                    className="text-[#bab0a8] hover:text-[#f47f7f] cursor-pointer"
+                  >
+                    <FontAwesomeIcon icon={faCircleDown} />
+                  </button>
                 </div>
-                <p className="text-[12px] font-medium text-[#181818] truncate flex-1">{file.file_url.split("/").pop()}</p>
-                <button onClick={() => downloadFile(file.file_url)} className="text-[#bab0a8] hover:text-[#f47f7f]"><FontAwesomeIcon icon={faCircleDown} /></button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -226,12 +248,12 @@ const GroupChatInfo = ({ token, conversation, user }) => {
       </div>
 
       {/* ✅ Preview Modal */}
-      {previewImage && (
-        <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
-            <button onClick={() => setPreviewImage(null)} className="absolute top-5 right-5 text-white text-3xl cursor-pointer">✕</button>
-            <img src={previewImage} className="max-h-[75vh] max-w-[90vw] rounded-xl shadow-2xl" alt="Preview" onClick={(e) => e.stopPropagation()} />
+      {previewData && (
+        <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4" onClick={() => setPreviewData(null)}>
+            <button onClick={() => setPreviewData(null)} className="absolute top-5 right-5 text-white text-3xl cursor-pointer">✕</button>
+            <img src={previewData.url} className="max-h-[75vh] max-w-[90vw] rounded-xl shadow-2xl" alt="Preview" onClick={(e) => e.stopPropagation()} />
             <button 
-                onClick={(e) => { e.stopPropagation(); downloadFile(previewImage); }}
+                onClick={(e) => { e.stopPropagation(); downloadMedia(previewData.url, previewData.name); }}
                 className="mt-6 bg-[#f47f7f] text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-[#d95f5f] cursor-pointer"
             >
                 <FontAwesomeIcon icon={faCircleDown} className="mr-2" /> Download
