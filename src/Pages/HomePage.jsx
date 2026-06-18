@@ -54,7 +54,8 @@ const VALID_ACCESS = {
     "Online Stock": "online_stock_viewer",
     "Add Book": "add_book_dialog",
     "Pending Checklist": "pending_checklist_dialog",
-    "Authors Edit": "edit_author_detail"
+    "Authors Edit": "edit_author_detail",
+    "Orders": "orders"
 }
 
 
