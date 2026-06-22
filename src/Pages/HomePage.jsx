@@ -25,7 +25,7 @@ const VALID_APPS = {
 };
 
 const VALID_ACCESS = {
-   "ISBN": "manage_isbn_dialog",
+    "ISBN": "manage_isbn_dialog",
     "Payment": "manage_price_dialog",
     "Authors": "edit_author_dialog",
     "Operations": "edit_operation_dialog",
@@ -35,7 +35,6 @@ const VALID_ACCESS = {
     "Print Management": "print_management",
     "Manage Delivery": "delivery_management",
     "Inventory": "inventory",
-    "Godown Inventory": "godown_inventory",
     "Listings": "online_listings",
     "File Management": "file_management",
     "Social Coverage": "social_coverage",
@@ -52,10 +51,16 @@ const VALID_ACCESS = {
     "Activity Summary": "activity_summary_dialog",
     "Export Data": "export_data",
     "Online Stock": "online_stock_viewer",
+    "Author Emails": "author_emails",
+    "Monitoring": "monitoring",
+    "Payments": "payments",
+    "Activity Log": "activity_log",
+    "Settings": "settings",
     "Add Book": "add_book_dialog",
     "Pending Checklist": "pending_checklist_dialog",
     "Authors Edit": "edit_author_detail",
-    "Orders": "orders"
+    "Orders": "orders",
+    "Local LLM": "local_llm"
 }
 
 
