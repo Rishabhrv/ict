@@ -35,7 +35,7 @@ const ClonePage = () => {
     // }
     // setSessionId(storedSession);
 
-    
+
 
     // ✅ Validate token
     fetch("http://localhost:5001/auth/validate_and_details", {
