@@ -21,16 +21,16 @@ const VALID_APPS = {
   Tasks: "tasks",
   Sales: "sales",
   Clone: "clone",
+  Home: "home",
 };
 
 const VALID_ACCESS = {
-   "ISBN": "manage_isbn_dialog",
+    "ISBN": "manage_isbn_dialog",
     "Payment": "manage_price_dialog",
     "Authors": "edit_author_dialog",
     "Operations": "edit_operation_dialog",
     "Printing & Delivery": "edit_inventory_delivery_dialog",
     "DatadashBoard": "datadashoard",
-    "Advance Search": "advance_search",
     "Team Dashboard": "team_dashboard",
     "Print Management": "print_management",
     "Manage Delivery": "delivery_management",
@@ -49,9 +49,18 @@ const VALID_ACCESS = {
     "Extra Books": "extra_books",
     "Sales Tracking": "sales_track",
     "Activity Summary": "activity_summary_dialog",
+    "Export Data": "export_data",
+    "Online Stock": "online_stock_viewer",
+    "Author Emails": "author_emails",
+    "Monitoring": "monitoring",
+    "Payments": "payments",
+    "Activity Log": "activity_log",
+    "Settings": "settings",
     "Add Book": "add_book_dialog",
     "Pending Checklist": "pending_checklist_dialog",
-    "Authors Edit": "edit_author_detail"
+    "Authors Edit": "edit_author_detail",
+    "Orders": "orders",
+    "Local LLM": "local_llm"
 }
 
 
