@@ -1742,25 +1742,21 @@ const handleBulkDeleteConfirmed = async () => {
                             )}
                           </div>
                             <button
-                              onClick={async () => {
-                                try {
-                                  const response = await fetch(fileUrl, { mode: "cors" });
-                                  const blob = await response.blob();
-                                  const blobUrl = window.URL.createObjectURL(blob);
-                                  const a = document.createElement("a");
-                                  a.href = blobUrl;
-                                  a.download = fileOriginalName || cleanDisplayName(fileName);
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  document.body.removeChild(a);
-                                  window.URL.revokeObjectURL(blobUrl);
-                                } catch (error) {
-                                  console.error("Download failed:", error);
-                                }
+                              onClick={(e) => {
+                                e.preventDefault();
+                                
+                                const link = document.createElement("a");
+                                link.href = fileUrl;
+                                link.download = fileOriginalName || cleanDisplayName(fileName);
+                                link.target = "_blank"; // Failsafe: opens in a new tab if the browser tries to preview it
+                                
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
                               }}
                               className={`cursor-pointer`}
                             >
-                              <div className="bg-white p-2 rounded-full  hover:bg-gray-50 transition-colors">
+                              <div className="bg-white p-2 rounded-full hover:bg-gray-50 transition-colors">
                                 <ArrowDown className="text-red-500 w-4 h-4" />
                               </div>
                             </button>

@@ -1563,28 +1563,22 @@ const handleBulkDeleteConfirmed = async () => {
                                     
                                   </div>
                                     <button
-                                      onClick={async () => {
-                                        try {
-                                          const response = await fetch(fileUrl, { mode: "cors" });
-                                          const blob = await response.blob();
-                                          const blobUrl = window.URL.createObjectURL(blob);
-                                          const a = document.createElement("a");
-                                          a.href = blobUrl;
-                                          a.download = fileName;
-                                          document.body.appendChild(a);
-                                          a.click();
-                                          a.remove();
-                                          window.URL.revokeObjectURL(blobUrl);
-                                        } catch (error) {
-                                          console.error("Download failed:", error);
-                                        }
-                                      }}
-                                      className="text-[11px] text-blue-600 hover:underline cursor-pointer"
-                                    >
-                                      <div className="bg-white p-2 rounded-full  hover:bg-gray-50 transition-colors">
-                                                                      <ArrowDown className="text-red-500 w-4 h-4" />
-                                                                    </div>
-                                    </button>
+                                       onClick={(e) => {
+                                         e.preventDefault();
+                                         const a = document.createElement("a");
+                                         a.href = fileUrl;
+                                         a.download = fileName;
+                                         a.target = "_blank"; // Failsafe to open in a new tab if browser tries to preview
+                                         document.body.appendChild(a);
+                                         a.click();
+                                         document.body.removeChild(a);
+                                       }}
+                                       className="text-[11px] text-blue-600 hover:underline cursor-pointer"
+                                     >
+                                       <div className="bg-white p-2 rounded-full  hover:bg-gray-50 transition-colors">
+                                         <ArrowDown className="text-red-500 w-4 h-4" />
+                                       </div>
+                                     </button>
                                 </div>
                               );
                             })()
