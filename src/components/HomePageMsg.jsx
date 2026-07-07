@@ -40,6 +40,7 @@ const MAX_FILES = 10;
 
 
 const API_URL = process.env.REACT_APP_API_URL;
+const FALLBACK_IMAGE = "data:image/svg+xml;charset=UTF-8,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='14' font-weight='500' fill='%239ca3af' text-anchor='middle' dominant-baseline='middle'%3EImage Not Found%3C/text%3E%3C/svg%3E";
 
 const HomePageMsg = ({ token, conversation, user, onNewMessage, scrollToMessageId, onScrollComplete }) => {
   const [messages, setMessages] = useState([]);
@@ -1597,7 +1598,11 @@ const handleBulkDeleteConfirmed = async () => {
                                     <img
                                       src={replyText}
                                       alt="reply-img"
-                                      className="w-[100%] h-20 rounded object-cover object-top"
+                                      className="w-[100%] h-20 rounded object-cover object-top bg-gray-50"
+                                      onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src = FALLBACK_IMAGE;
+                                      }}
                                     />     
                                   </div>
                                   );
@@ -1671,8 +1676,13 @@ const handleBulkDeleteConfirmed = async () => {
                         <img
                           src={fileUrl}
                           alt="sent"
-                          className="max-w-[200px] rounded-xl cursor-pointer transition-transform duration-200 group-hover:scale-[1.02]"
+                          className="max-w-[200px] min-h-[100px] object-cover rounded-xl cursor-pointer transition-transform duration-200 group-hover:scale-[1.02] bg-gray-50"
                           onClick={() => setPreviewImage(fileUrl)}
+                          onError={(e) => {
+                            e.target.onerror = null; // prevents infinite looping
+                            e.target.src = FALLBACK_IMAGE; // Swap to placeholder
+                            e.target.classList.add("pointer-events-none"); // Disables clicking to open the preview modal
+                          }}
                         />
                         <button
                           onClick={async () => {
@@ -1742,17 +1752,30 @@ const handleBulkDeleteConfirmed = async () => {
                             )}
                           </div>
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.preventDefault();
                                 
-                                const link = document.createElement("a");
-                                link.href = fileUrl;
-                                link.download = fileOriginalName || cleanDisplayName(fileName);
-                                link.target = "_blank"; // Failsafe: opens in a new tab if the browser tries to preview it
-                                
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
+                                try {
+                                  const response = await fetch(fileUrl, { method: "HEAD", mode: "cors" });
+                                  
+                                  if (!response.ok) {
+                                    showErrorPopup("File not found or no longer available ❌");
+                                    return; 
+                                  }
+                              
+                                  const link = document.createElement("a");
+                                  link.href = fileUrl;
+                                  link.download = fileOriginalName || cleanDisplayName(fileName);
+                                  link.target = "_blank"; 
+                                  
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  
+                                  document.body.removeChild(link);
+                                } catch (error) {
+                                  console.error("Download check failed:", error);
+                                  showErrorPopup("Network error or file unavailable ❌");
+                                }
                               }}
                               className={`cursor-pointer`}
                             >
@@ -2137,7 +2160,11 @@ const handleBulkDeleteConfirmed = async () => {
                           <img
                             src={replyText}
                             alt="reply-img"
-                            className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm"
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-200 shadow-sm bg-gray-50"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = FALLBACK_IMAGE;
+                            }}
                           />
                           <span className="text-xs text-gray-500 font-medium italic">Photo</span>
                         </div>
@@ -2395,8 +2422,12 @@ const handleBulkDeleteConfirmed = async () => {
           <img 
             src={previewImage}
             alt="Preview"
-            className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-lg"
-            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+            className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-lg bg-gray-50"
+            onClick={(e) => e.stopPropagation()} 
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = FALLBACK_IMAGE;
+            }}
           />
         </div>
       )}
