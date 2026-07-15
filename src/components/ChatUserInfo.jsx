@@ -17,6 +17,7 @@ import ConfirmPopup from "./ConfirmPopup";
 import ReactDOM from "react-dom";
 
 const API_URL = process.env.REACT_APP_API_URL;
+const FALLBACK_IMAGE = "data:image/svg+xml;charset=UTF-8,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='14' font-weight='500' fill='%239ca3af' text-anchor='middle' dominant-baseline='middle'%3EImage Not Found%3C/text%3E%3C/svg%3E";
 
 const ChatUserInfo = ({ token, conversation, user }) => {
   const [mediaFiles, setMediaFiles] = useState([]);
@@ -238,8 +239,13 @@ const ChatUserInfo = ({ token, conversation, user }) => {
                 key={i}
                 src={file.file_url}
                 alt={file.original_name || "Media"}
-                className="w-full h-[75px] object-cover rounded-[10px] cursor-pointer hover:scale-105 transition"
+                className="w-full h-[75px] object-cover rounded-[10px] cursor-pointer hover:scale-105 transition bg-gray-50"
                 onClick={() => setPreviewData({ url: file.file_url, name: file.original_name })}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = FALLBACK_IMAGE;
+                  e.target.classList.add("pointer-events-none"); // Disables opening the preview modal for broken images
+                }}
               />
             ))}
           </div>
@@ -317,9 +323,13 @@ const ChatUserInfo = ({ token, conversation, user }) => {
               </button>
               <img 
                 src={previewData.url} 
-                className="max-h-[80vh] max-w-[90vw] rounded-xl shadow-2xl" 
+                className="max-h-[80vh] max-w-[90vw] rounded-xl shadow-2xl bg-gray-50" 
                 alt="Preview" 
                 onClick={(e) => e.stopPropagation()} 
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = FALLBACK_IMAGE;
+                }}
               />
               <div className="mt-6 flex gap-4">
                 <button 

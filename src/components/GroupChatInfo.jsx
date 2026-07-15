@@ -10,6 +10,7 @@ import AlertPopup from "./AlertPopup";
 import ConfirmPopup from "./ConfirmPopup";
 
 const API_URL = process.env.REACT_APP_API_URL;
+const FALLBACK_IMAGE = "data:image/svg+xml;charset=UTF-8,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='14' font-weight='500' fill='%239ca3af' text-anchor='middle' dominant-baseline='middle'%3EImage Not Found%3C/text%3E%3C/svg%3E";
 
 const GroupChatInfo = ({ token, conversation, user }) => {
   const [mediaFiles, setMediaFiles] = useState([]);
@@ -171,8 +172,13 @@ const GroupChatInfo = ({ token, conversation, user }) => {
                 key={i} 
                 src={file.file_url} 
                 alt={file.original_name || "Media"} 
-                className="w-full h-[75px] object-cover rounded-[10px] cursor-pointer hover:scale-105 transition" 
+                className="w-full h-[75px] object-cover rounded-[10px] cursor-pointer hover:scale-105 transition bg-gray-50" 
                 onClick={() => setPreviewData({ url: file.file_url, name: file.original_name })} 
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = FALLBACK_IMAGE;
+                  e.target.classList.add("pointer-events-none"); // Disables opening the preview modal for broken images
+                }}
               />
             ))}
           </div>
@@ -251,7 +257,16 @@ const GroupChatInfo = ({ token, conversation, user }) => {
       {previewData && (
         <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4" onClick={() => setPreviewData(null)}>
             <button onClick={() => setPreviewData(null)} className="absolute top-5 right-5 text-white text-3xl cursor-pointer">✕</button>
-            <img src={previewData.url} className="max-h-[75vh] max-w-[90vw] rounded-xl shadow-2xl" alt="Preview" onClick={(e) => e.stopPropagation()} />
+            <img 
+              src={previewData.url} 
+              className="max-h-[75vh] max-w-[90vw] rounded-xl shadow-2xl bg-gray-50" 
+              alt="Preview" 
+              onClick={(e) => e.stopPropagation()} 
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = FALLBACK_IMAGE;
+              }}
+            />
             <button 
                 onClick={(e) => { e.stopPropagation(); downloadMedia(previewData.url, previewData.name); }}
                 className="mt-6 bg-[#f47f7f] text-white px-8 py-3 rounded-full font-bold shadow-lg hover:bg-[#d95f5f] cursor-pointer"
@@ -260,7 +275,6 @@ const GroupChatInfo = ({ token, conversation, user }) => {
             </button>
         </div>
       )}
-
       {/* Modals & Popups */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex justify-center items-center z-50">
