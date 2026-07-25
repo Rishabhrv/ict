@@ -47,6 +47,7 @@ const VALID_ACCESS = {
     "Details": "details",
     "Message": "messages",
     "Attendance": "attendance",
+    "My Attendance": "my_attendance",
     "Extra Books": "extra_books",
     "Sales Tracking": "sales_track",
     "Activity Summary": "activity_summary_dialog",
@@ -60,7 +61,8 @@ const VALID_ACCESS = {
     "Pending Checklist": "pending_checklist_dialog",
     "Authors Edit": "edit_author_detail",
     "Orders": "orders",
-    "Local LLM": "local_llm"
+    "Local LLM": "local_llm",
+    "Certificates": "certificates"
 }
 
 
