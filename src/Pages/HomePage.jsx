@@ -57,6 +57,7 @@ const VALID_ACCESS = {
     "Payments": "payments",
     "Activity Log": "activity_log",
     "Settings": "settings",
+    "Author Dashboard" : "author_dashboard",
     "Add Book": "add_book_dialog",
     "Pending Checklist": "pending_checklist_dialog",
     "Authors Edit": "edit_author_detail",
