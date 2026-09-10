@@ -58,6 +58,7 @@ const VALID_ACCESS = {
     "Activity Log": "activity_log",
     "Settings": "settings",
     "Author Dashboard" : "author_dashboard",
+    "Live Stats": "live_users",
     "Add Book": "add_book_dialog",
     "Pending Checklist": "pending_checklist_dialog",
     "Authors Edit": "edit_author_detail",
