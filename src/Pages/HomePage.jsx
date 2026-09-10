@@ -252,6 +252,7 @@ useEffect(() => {
   }
 
   if (urlToken) {
+    try { localStorage.removeItem("auth_logout"); } catch (e) {}
     localStorage.setItem("token", urlToken);
     setToken(urlToken);
     localStorage.setItem("session_id", urlSessionId);
@@ -272,6 +273,48 @@ useEffect(() => {
 
   // ✅ Tell React we intentionally ignore dependencies
   // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+// ✅ Cross-tab & Back-navigation instant logout listener
+useEffect(() => {
+  const handleLogoutTrigger = () => {
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("session_id");
+      localStorage.removeItem("click_id");
+    } catch (e) {}
+    window.location.href = FLASK_LOGIN_URL;
+  };
+
+  const handleStorage = (e) => {
+    if (e.key === "auth_logout" && e.newValue) {
+      handleLogoutTrigger();
+    }
+  };
+
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible") {
+      if (localStorage.getItem("auth_logout")) {
+        handleLogoutTrigger();
+      }
+    }
+  };
+
+  const handlePageShow = () => {
+    if (localStorage.getItem("auth_logout")) {
+      handleLogoutTrigger();
+    }
+  };
+
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener("visibilitychange", handleVisibility);
+  window.addEventListener("pageshow", handlePageShow);
+
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener("visibilitychange", handleVisibility);
+    window.removeEventListener("pageshow", handlePageShow);
+  };
 }, []);
 
 
