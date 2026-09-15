@@ -64,7 +64,8 @@ const VALID_ACCESS = {
     "Authors Edit": "edit_author_detail",
     "Orders": "orders",
     "Local LLM": "local_llm",
-    "Certificates": "certificates"
+    "Certificates": "certificates",
+    "Paid Copies": "paid_copies"
 }
 
 
