@@ -33,6 +33,7 @@ const VALID_ACCESS = {
     "DatadashBoard": "datadashoard",
     "Team Dashboard": "team_dashboard",
     "Print Management": "print_management",
+    "Book Pipeline": "book_pipeline",
     "Manage Delivery": "delivery_management",
     "Inventory": "inventory",
     "Listings": "online_listings",
