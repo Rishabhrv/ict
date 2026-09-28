@@ -56,6 +56,7 @@ const VALID_ACCESS = {
     "Author Emails": "author_emails",
     "Monitoring": "monitoring",
     "Payments": "payments",
+    "Accountant": "accountant",
     "Activity Log": "activity_log",
     "Settings": "settings",
     "Author Dashboard" : "author_dashboard",
