@@ -67,7 +67,8 @@ const VALID_ACCESS = {
     "Orders": "orders",
     "Local LLM": "local_llm",
     "Certificates": "certificates",
-    "Paid Copies": "paid_copies"
+    "Paid Copies": "paid_copies",
+    "Doc Formatter": "formatter"
 }
 
 
