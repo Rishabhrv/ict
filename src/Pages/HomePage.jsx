@@ -43,6 +43,7 @@ const VALID_ACCESS = {
     "Pending Work": "pending_books",
     "IJISEM": "ijisem",
     "Academic Guru": "academic_guru",
+    "AG Volumes": "agvolumes_dashboard",
     "Timesheet": "timesheet",
     "Task Manager": "task_manager",
     "Details": "details",
